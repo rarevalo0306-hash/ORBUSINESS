@@ -230,6 +230,29 @@ export function nextQuestion(fromIndex: number, b: B): Question | null {
   return null;
 }
 
+// Preguntas que aplican a este negocio y todavía no tienen respuesta, en orden.
+// Algunas tienen un valor por defecto (moneda, trato, cotizaciones): esas cuentan como
+// respondidas solo si el dueño ya las contestó.
+const ASKED_ONLY = new Set<QuestionKey>(["currencies", "address_form", "quote_requires_approval"]);
+
+export function missingQuestions(b: BusinessRow, services: ServiceInput[], answeredKeys: Set<string>): Question[] {
+  return QUESTIONS.filter((q) => {
+    if (q.applies && !q.applies(b)) return false;
+    if (ASKED_ONLY.has(q.key)) return !answeredKeys.has(q.key);
+    if (q.key === "location") return !b.country_code; // sin país no hay moneda ni costumbres locales
+    return describeAnswer(q.key, b, services, true) === null;
+  });
+}
+
+// La IA a veces hace su propia pregunta en el acuse; la app agrega la siguiente pregunta,
+// así que se quitan las oraciones con pregunta para que Nuna pregunte una sola cosa a la vez.
+export function withoutQuestions(ack: string): string {
+  const kept = ack
+    .split(/(?<=[.!?])\s+/)
+    .filter((sentence) => !sentence.includes("?") && !sentence.includes("¿"));
+  return kept.join(" ").trim() || "Anotado.";
+}
+
 // ---------- moneda ----------
 
 const SYMBOLS: Record<string, string> = {

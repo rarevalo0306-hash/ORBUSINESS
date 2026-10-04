@@ -6,6 +6,7 @@ import { marketContext, marketFor, normalizePhone } from "@/lib/markets";
 import {
   currencyPatch,
   locationCheck,
+  withoutQuestions,
   questionFor,
   extractWithRules,
   type BusinessPatch,
@@ -219,7 +220,8 @@ export async function extractAnswer(key: QuestionKey, answer: string, b: B): Pro
   if (provider === "rules") return extractWithRules(key, answer, b);
   try {
     const out = provider === "deepseek" ? await askDeepSeek(key, answer, b) : await askClaude(key, answer, b);
-    return toExtraction(key, out, b);
+    const result = toExtraction(key, out, b);
+    return result.ok ? { ...result, ack: withoutQuestions(result.ack) } : result;
   } catch (error) {
     // Si la IA falla, Nuna no se detiene: entiende la respuesta con reglas.
     console.error(`Nuna (${provider}) falló, uso reglas:`, error);

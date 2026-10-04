@@ -1,8 +1,8 @@
 import { ButtonLink, Card, PageTitle } from "@/components/ui";
 import { requireBusiness } from "@/lib/business";
-import { QUESTIONS, describeAnswer } from "@/lib/interview";
+import { QUESTIONS, describeAnswer, missingQuestions } from "@/lib/interview";
 import { nunaUsesAI } from "@/lib/nuna";
-import { startFix } from "./actions";
+import { completeMissing, startFix } from "./actions";
 import { InterviewChat } from "./chat";
 import { RestartButton } from "./restart-button";
 
@@ -22,6 +22,13 @@ export default async function InterviewPage() {
   const interviewDone = business.onboarding_step !== "interview";
   const fixingKey = step?.startsWith("fix:") ? step.slice(4).split(">")[0] : null;
 
+  const answeredKeys = new Set(
+    (messages ?? [])
+      .filter((m) => m.role === "owner")
+      .map((m) => (m.step_key ?? "").replace(/^fix:/, "").split(">")[0]),
+  );
+  const missing = step === "done" ? missingQuestions(business, services ?? [], answeredKeys) : [];
+
   const understood = QUESTIONS.filter((q) => !q.applies || q.applies(business)).map((q) => ({
     key: q.key,
     label: q.label,
@@ -39,7 +46,18 @@ export default async function InterviewPage() {
         }
       />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <InterviewChat messages={messages ?? []} open={open} />
+        <div className="flex flex-col gap-3">
+          <InterviewChat messages={messages ?? []} open={open} />
+          {missing.length > 0 && (
+            <form action={completeMissing} className="flex flex-wrap items-center gap-3 rounded-2xl border border-lime/40 bg-lime/10 p-4">
+              <p className="flex-1">
+                Nuna necesita {missing.length} dato{missing.length > 1 ? "s" : ""} más para dejar todo listo (
+                {missing.map((q) => q.label.toLowerCase()).join(", ")}).
+              </p>
+              <button className="min-h-11 rounded-full bg-lime px-5 font-semibold text-lime-ink">Completar ahora</button>
+            </form>
+          )}
+        </div>
         <Card className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="font-semibold">Lo que Nuna entendió</h2>

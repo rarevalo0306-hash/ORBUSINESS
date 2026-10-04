@@ -5,9 +5,8 @@ import { requireBusiness } from "@/lib/business";
 import {
   CLOSING,
   QUESTIONS,
-  nextQuestion,
+  missingQuestions,
   questionFor,
-  questionIndex,
   type BusinessRow,
   type Extraction,
   type QuestionKey,
@@ -82,7 +81,7 @@ export async function answerInterview(text: string) {
   const { supabase, user, business } = await requireBusiness();
 
   const step = await currentStep(supabase, business.id);
-  const { key, fixing, resume } = parseStep(step);
+  const { key, fixing } = parseStep(step);
   const q = questionFor(key);
   if (!q) return; // entrevista terminada
 
@@ -95,23 +94,36 @@ export async function answerInterview(text: string) {
   }
   const updated = await saveExtraction(supabase, business, user.id, q.key, result);
 
-  if (fixing) {
-    // Volver a donde iba la entrevista (si esa pregunta ya no aplica, a la siguiente que sí).
-    const back = questionFor(resume);
-    const target = back && (!back.applies || back.applies(updated)) ? back : back ? nextQuestion(questionIndex(back.key), updated) : null;
-    if (target) await nuna(supabase, business.id, target.key, `${result.ack} Listo, corregido. Sigamos: ${target.text(updated)}`);
-    else await nuna(supabase, business.id, "done", `${result.ack} Listo, ya quedó corregido.`);
+  // Siguiente: lo primero que falte (así una corrección o un cambio de tipo de negocio
+  // hace que Nuna pregunte lo que ahora aplica).
+  const next = (await missingFor(supabase, updated))[0];
+  if (next) {
+    const lead = fixing ? `${result.ack} Listo, corregido. Sigamos:` : result.ack;
+    await nuna(supabase, business.id, next.key, `${lead} ${next.text(updated)}`);
+  } else if (updated.onboarding_step === "interview") {
+    await nuna(supabase, business.id, "done", `${result.ack} ${CLOSING(updated.owner_name)}`);
+    await supabase.from("businesses").update({ onboarding_step: "brand" }).eq("id", business.id);
   } else {
-    const next = nextQuestion(questionIndex(q.key), updated);
-    if (next) {
-      await nuna(supabase, business.id, next.key, `${result.ack} ${next.text(updated)}`);
-    } else {
-      await nuna(supabase, business.id, "done", `${result.ack} ${CLOSING(updated.owner_name)}`);
-      if (updated.onboarding_step === "interview") {
-        await supabase.from("businesses").update({ onboarding_step: "brand" }).eq("id", business.id);
-      }
-    }
+    await nuna(supabase, business.id, "done", `${result.ack} Listo, ya quedó todo actualizado.`);
   }
+  revalidatePath("/onboarding", "layout");
+}
+
+async function missingFor(supabase: Supabase, b: BusinessRow) {
+  const [{ data: services }, { data: answered }] = await Promise.all([
+    supabase.from("services").select("name, price").eq("business_id", b.id),
+    supabase.from("interview_messages").select("step_key").eq("business_id", b.id).eq("role", "owner"),
+  ]);
+  const keys = new Set((answered ?? []).map((m) => parseStep(m.step_key ?? "").key));
+  return missingQuestions(b, services ?? [], keys);
+}
+
+// Entrevistas que ya terminaron pero a las que les faltan datos nuevos (por ejemplo, país o WhatsApp).
+export async function completeMissing() {
+  const { supabase, business } = await requireBusiness();
+  const next = (await missingFor(supabase, business))[0];
+  if (!next) return;
+  await nuna(supabase, business.id, next.key, `Me faltan unos datos para dejar todo listo. ${next.text(business)}`);
   revalidatePath("/onboarding", "layout");
 }
 
