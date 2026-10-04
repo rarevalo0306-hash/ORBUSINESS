@@ -60,7 +60,7 @@ export function SiteView({ site, leadForm }: { site: SiteContent; leadForm?: Rea
             {site.services.map((s) => (
               <li key={s.name} className="flex flex-col gap-1 rounded-2xl border border-[#d6dccd] bg-white p-5">
                 <span className="text-lg font-semibold">{s.name}</span>
-                <span className="text-[#4a6b3e]">{priceLabel(s.price)}</span>
+                <span className="text-[#4a6b3e]">{priceLabel(s.price, site.currency)}</span>
               </li>
             ))}
           </ul>

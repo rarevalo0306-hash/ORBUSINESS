@@ -2,13 +2,26 @@
 
 import { revalidatePath } from "next/cache";
 import { requireBusiness } from "@/lib/business";
-import { CLOSING, QUESTIONS, extractWithRules, questionIndex, type Extraction } from "@/lib/interview";
+import {
+  CLOSING,
+  QUESTIONS,
+  nextQuestion,
+  questionFor,
+  questionIndex,
+  type BusinessRow,
+  type Extraction,
+  type QuestionKey,
+} from "@/lib/interview";
 import { extractAnswer } from "@/lib/nuna";
 import type { createClient } from "@/lib/supabase/server";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
-async function currentStepKey(supabase: Supabase, businessId: string) {
+// El paso actual se guarda en el último mensaje de Nuna:
+//   "<pregunta>"                 entrevista normal
+//   "fix:<pregunta>><regreso>"   corrigiendo un dato; luego vuelve a <regreso>
+//   "done"                       entrevista terminada
+async function currentStep(supabase: Supabase, businessId: string) {
   const { data } = await supabase
     .from("interview_messages")
     .select("step_key")
@@ -20,54 +33,47 @@ async function currentStepKey(supabase: Supabase, businessId: string) {
   return data?.step_key ?? QUESTIONS[0].key;
 }
 
-// Guarda lo que Nuna entendió y escribe su siguiente mensaje.
-async function applyExtraction(
-  supabase: Supabase,
-  businessId: string,
-  userId: string,
-  stepIndex: number,
-  result: Extraction,
-  ownerName: string | null,
-) {
-  const q = QUESTIONS[stepIndex];
-  if (!result.ok) {
-    await supabase
-      .from("interview_messages")
-      .insert({ business_id: businessId, role: "nuna", step_key: q.key, content: result.ack });
-    return;
+function parseStep(step: string): { key: string; fixing: boolean; resume: string | null } {
+  if (step.startsWith("fix:")) {
+    const [key, resume] = step.slice(4).split(">");
+    return { key, fixing: true, resume: resume ?? "done" };
   }
+  return { key: step, fixing: false, resume: null };
+}
 
+function nuna(supabase: Supabase, businessId: string, step: string, content: string) {
+  return supabase.from("interview_messages").insert({ business_id: businessId, role: "nuna", step_key: step, content });
+}
+
+// Guarda lo que Nuna entendió y devuelve el negocio actualizado.
+async function saveExtraction(
+  supabase: Supabase,
+  business: BusinessRow,
+  userId: string,
+  key: QuestionKey,
+  result: Extract<Extraction, { ok: true }>,
+): Promise<BusinessRow> {
+  let updated = business;
   if (Object.keys(result.patch).length) {
-    const { error } = await supabase.from("businesses").update(result.patch).eq("id", businessId);
+    const { data, error } = await supabase.from("businesses").update(result.patch).eq("id", business.id).select("*").single();
     if (error) throw new Error(error.message);
+    updated = data;
   }
   if (result.services) {
-    await supabase.from("services").delete().eq("business_id", businessId);
+    await supabase.from("services").delete().eq("business_id", business.id);
     const { error } = await supabase
       .from("services")
-      .insert(result.services.map((s, i) => ({ business_id: businessId, name: s.name, price: s.price, sort: i })));
+      .insert(result.services.map((s, i) => ({ business_id: business.id, name: s.name, price: s.price, sort: i })));
     if (error) throw new Error(error.message);
   }
   await supabase.from("audit_log").insert({
-    business_id: businessId,
+    business_id: business.id,
     actor: "nuna",
     actor_user_id: userId,
     action: "interview.answer_saved",
-    data: { step: q.key, patch: result.patch, services: result.services ?? null },
+    data: { step: key, patch: result.patch, services: result.services ?? null },
   });
-
-  const next = QUESTIONS[stepIndex + 1];
-  if (next) {
-    await supabase
-      .from("interview_messages")
-      .insert({ business_id: businessId, role: "nuna", step_key: next.key, content: `${result.ack} ${next.text}` });
-  } else {
-    const owner = (result.patch.owner_name as string | undefined) ?? ownerName;
-    await supabase
-      .from("interview_messages")
-      .insert({ business_id: businessId, role: "nuna", step_key: "done", content: `${result.ack} ${CLOSING(owner)}` });
-    await supabase.from("businesses").update({ onboarding_step: "brand" }).eq("id", businessId);
-  }
+  return updated;
 }
 
 export async function answerInterview(text: string) {
@@ -75,32 +81,82 @@ export async function answerInterview(text: string) {
   if (!answer) return;
   const { supabase, user, business } = await requireBusiness();
 
-  const key = await currentStepKey(supabase, business.id);
-  const index = questionIndex(key);
-  if (index < 0) return; // entrevista terminada
+  const step = await currentStep(supabase, business.id);
+  const { key, fixing, resume } = parseStep(step);
+  const q = questionFor(key);
+  if (!q) return; // entrevista terminada
 
-  await supabase
-    .from("interview_messages")
-    .insert({ business_id: business.id, role: "owner", step_key: key, content: answer });
-  const result = await extractAnswer(QUESTIONS[index].key, answer);
-  await applyExtraction(supabase, business.id, user.id, index, result, business.owner_name);
+  await supabase.from("interview_messages").insert({ business_id: business.id, role: "owner", step_key: step, content: answer });
+  const result = await extractAnswer(q.key, answer, business);
+  if (!result.ok) {
+    await nuna(supabase, business.id, step, result.ack);
+    revalidatePath("/onboarding", "layout");
+    return;
+  }
+  const updated = await saveExtraction(supabase, business, user.id, q.key, result);
+
+  if (fixing) {
+    // Volver a donde iba la entrevista (si esa pregunta ya no aplica, a la siguiente que sí).
+    const back = questionFor(resume);
+    const target = back && (!back.applies || back.applies(updated)) ? back : back ? nextQuestion(questionIndex(back.key), updated) : null;
+    if (target) await nuna(supabase, business.id, target.key, `${result.ack} Listo, corregido. Sigamos: ${target.text(updated)}`);
+    else await nuna(supabase, business.id, "done", `${result.ack} Listo, ya quedó corregido.`);
+  } else {
+    const next = nextQuestion(questionIndex(q.key), updated);
+    if (next) {
+      await nuna(supabase, business.id, next.key, `${result.ack} ${next.text(updated)}`);
+    } else {
+      await nuna(supabase, business.id, "done", `${result.ack} ${CLOSING(updated.owner_name)}`);
+      if (updated.onboarding_step === "interview") {
+        await supabase.from("businesses").update({ onboarding_step: "brand" }).eq("id", business.id);
+      }
+    }
+  }
   revalidatePath("/onboarding", "layout");
 }
 
-// Atajo para demos: contesta lo que falta con el ejemplo de Ricardo el jardinero.
-export async function fillWithExample() {
+// "Corregir": Nuna vuelve a hacer una pregunta y después regresa a donde iba.
+export async function startFix(key: string) {
+  const { supabase, business } = await requireBusiness();
+  const q = questionFor(key);
+  if (!q || (q.applies && !q.applies(business))) return;
+  const { key: current, fixing, resume } = parseStep(await currentStep(supabase, business.id));
+  const back = fixing ? resume : current;
+  await nuna(supabase, business.id, `fix:${q.key}>${back}`, `Claro, corrijamos eso. ${q.text(business)}`);
+  revalidatePath("/onboarding", "layout");
+}
+
+// "Empezar de nuevo": borra lo que Nuna entendió y repite la entrevista.
+export async function restartInterview() {
   const { supabase, user, business } = await requireBusiness();
-  let index = questionIndex(await currentStepKey(supabase, business.id));
-  let owner = business.owner_name;
-  while (index >= 0 && index < QUESTIONS.length) {
-    const q = QUESTIONS[index];
-    await supabase
-      .from("interview_messages")
-      .insert({ business_id: business.id, role: "owner", step_key: q.key, content: q.example });
-    const result = extractWithRules(q.key, q.example);
-    if (result.ok && result.patch.owner_name) owner = result.patch.owner_name as string;
-    await applyExtraction(supabase, business.id, user.id, index, result, owner);
-    index += 1;
-  }
+  await supabase.from("interview_messages").delete().eq("business_id", business.id);
+  await supabase.from("services").delete().eq("business_id", business.id);
+  await supabase
+    .from("businesses")
+    .update({
+      name: "Mi negocio",
+      owner_name: null,
+      industry: null,
+      zone: null,
+      country: null,
+      currency: "USD",
+      hours: null,
+      business_type: null,
+      lead_sources: null,
+      visit_before_quote: null,
+      payment_timing: null,
+      offers_delivery: null,
+      has_recurring_clients: null,
+      quote_requires_approval: true,
+      onboarding_step: "interview",
+    })
+    .eq("id", business.id);
+  await nuna(supabase, business.id, QUESTIONS[0].key, QUESTIONS[0].text(business));
+  await supabase.from("audit_log").insert({
+    business_id: business.id,
+    actor: "owner",
+    actor_user_id: user.id,
+    action: "interview.restarted",
+  });
   revalidatePath("/onboarding", "layout");
 }

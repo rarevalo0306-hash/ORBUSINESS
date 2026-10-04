@@ -1,8 +1,10 @@
 import { ButtonLink, Card, PageTitle } from "@/components/ui";
 import { requireBusiness } from "@/lib/business";
-import { QUESTIONS, servicesText } from "@/lib/interview";
+import { QUESTIONS, describeAnswer } from "@/lib/interview";
 import { nunaUsesAI } from "@/lib/nuna";
+import { startFix } from "./actions";
 import { InterviewChat } from "./chat";
+import { RestartButton } from "./restart-button";
 
 export default async function InterviewPage() {
   const { supabase, business } = await requireBusiness();
@@ -15,23 +17,16 @@ export default async function InterviewPage() {
     supabase.from("services").select("name, price").eq("business_id", business.id).order("sort"),
   ]);
 
-  const last = messages?.filter((m) => m.role === "nuna").at(-1);
-  const current = QUESTIONS.find((q) => q.key === last?.step_key) ?? null;
-  const done = business.onboarding_step !== "interview";
+  const step = messages?.filter((m) => m.role === "nuna").at(-1)?.step_key ?? null;
+  const open = step !== "done";
+  const interviewDone = business.onboarding_step !== "interview";
+  const fixingKey = step?.startsWith("fix:") ? step.slice(4).split(">")[0] : null;
 
-  const understood: [string, string | null][] = [
-    ["Negocio", business.name === "Mi negocio" ? null : business.name],
-    ["Dueño", business.owner_name],
-    ["A qué se dedica", business.industry],
-    ["Productos o servicios", services?.length ? servicesText(services) : null],
-    ["Zona", business.zone],
-    ["Horario", business.hours],
-    ["Cómo llegan los clientes", business.lead_sources],
-    ["Antes de cotizar", business.visit_before_quote === null ? null : business.visit_before_quote ? "Visita primero" : "Cotiza directo"],
-    ["Cuándo cobra", { before: "Antes de empezar", deposit: "Anticipo + resto al terminar", after: "Al terminar" }[business.payment_timing ?? ""] ?? null],
-    ["Clientes recurrentes", business.has_recurring_clients === null ? null : business.has_recurring_clients ? "Sí" : "No"],
-    ["Cotizaciones", !done ? null : business.quote_requires_approval ? "Las revisa antes de enviar" : "Nuna las manda sola"],
-  ];
+  const understood = QUESTIONS.filter((q) => !q.applies || q.applies(business)).map((q) => ({
+    key: q.key,
+    label: q.label,
+    value: describeAnswer(q.key, business, services ?? [], interviewDone),
+  }));
 
   return (
     <>
@@ -40,24 +35,39 @@ export default async function InterviewPage() {
         lead={
           nunaUsesAI()
             ? "Contesta con tus palabras. Nuna (con IA) entiende tus respuestas y arma todo con ellas."
-            : "Contesta con tus palabras. Nuna está en modo básico (sin llave de IA todavía): entiende respuestas sencillas."
+            : "Contesta con tus palabras. Nuna está en modo básico (sin IA): entiende respuestas sencillas."
         }
       />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <InterviewChat messages={messages ?? []} open={!done} example={current?.example ?? null} />
+        <InterviewChat messages={messages ?? []} open={open} />
         <Card className="flex flex-col gap-3">
-          <h2 className="font-semibold">Lo que Nuna entendió</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-semibold">Lo que Nuna entendió</h2>
+            <RestartButton />
+          </div>
           <dl className="flex flex-col gap-3">
-            {understood.map(([label, value]) => (
-              <div key={label} className="border-b border-line pb-2">
-                <dt className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</dt>
-                <dd>{value ?? "—"}</dd>
+            {understood.map((item) => (
+              <div key={item.key} className="flex items-start justify-between gap-2 border-b border-line pb-2">
+                <div className="min-w-0">
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-muted">{item.label}</dt>
+                  <dd className="break-words">{item.value ?? "—"}</dd>
+                </div>
+                {item.value && fixingKey !== item.key && (
+                  <form action={startFix.bind(null, item.key)}>
+                    <button
+                      className="min-h-9 shrink-0 rounded-full border border-line px-3 text-xs text-muted hover:text-bone"
+                      aria-label={`Corregir ${item.label.toLowerCase()}`}
+                    >
+                      Corregir
+                    </button>
+                  </form>
+                )}
               </div>
             ))}
           </dl>
         </Card>
       </div>
-      {done && (
+      {interviewDone && !open && (
         <ButtonLink href="/onboarding/marca" className="self-start">
           Seguir: logo, fotos y web →
         </ButtonLink>

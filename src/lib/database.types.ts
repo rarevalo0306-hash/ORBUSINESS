@@ -34,6 +34,10 @@ export type Database = {
           payment_timing: string | null;
           has_recurring_clients: boolean | null;
           quote_requires_approval: boolean;
+          business_type: string | null;
+          country: string | null;
+          currency: string;
+          offers_delivery: boolean | null;
           onboarding_step: string;
           status: string;
           created_at: string;
@@ -52,6 +56,10 @@ export type Database = {
           payment_timing?: string | null;
           has_recurring_clients?: boolean | null;
           quote_requires_approval?: boolean;
+          business_type?: string | null;
+          country?: string | null;
+          currency?: string;
+          offers_delivery?: boolean | null;
           onboarding_step?: string;
           status?: string;
         }

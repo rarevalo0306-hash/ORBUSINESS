@@ -23,7 +23,7 @@ export default async function CrmSetupPage() {
       />
 
       <Card className="flex flex-col gap-4">
-        <h2 className="font-semibold">Las etapas de tu trabajo</h2>
+        <h2 className="font-semibold">El camino de tus clientes</h2>
         <ol className="flex flex-wrap items-center gap-2">
           {stages.map((s, i) => (
             <li key={s.key} className="flex items-center gap-2">

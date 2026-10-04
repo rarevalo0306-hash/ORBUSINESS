@@ -12,12 +12,18 @@ export type SiteContent = {
   zone: string;
   hours: string;
   services: { name: string; price: number | null }[];
+  currency: string;
   logoUrl: string | null;
   photos: string[];
   ctaLabel: string;
 };
 
 const TAGLINES: [string, string][] = [
+  ["ferret", "Todo para tu casa y tu obra, con buenos precios"],
+  ["tienda", "Lo que necesitas, cerca de ti y con buen trato"],
+  ["abarrot", "Lo de todos los días, cerca de tu casa"],
+  ["farmac", "Tu salud, con atención cercana"],
+  ["ropa", "Ropa para todos, a buen precio"],
   ["jardin", "Tu jardín impecable, sin que tengas que pensarlo"],
   ["limpi", "Tu casa limpia y en orden, cuando la necesitas"],
   ["salon", "Luce increíble, con cita cuando te queda"],
@@ -49,10 +55,13 @@ export function buildSiteContent(
     TAGLINES.find(([k]) => key.includes(k))?.[1] ?? `${industry} con atención personal y precios claros`;
   const intro = [
     `Somos ${b.name}${b.zone ? `, en ${b.zone}` : ""}.`,
-    b.visit_before_quote
-      ? "Pasamos a ver tu trabajo sin costo y te damos un precio claro."
-      : "Pide tu cotización y te respondemos en minutos.",
-    b.has_recurring_clients ? "También tenemos servicio fijo cada semana o cada mes." : "",
+    b.business_type === "products"
+      ? "Pregunta por precio y disponibilidad: te respondemos en minutos."
+      : b.visit_before_quote
+        ? "Pasamos a ver tu trabajo sin costo y te damos un precio claro."
+        : "Pide tu cotización y te respondemos en minutos.",
+    b.offers_delivery ? "Hacemos entregas a domicilio." : "",
+    b.has_recurring_clients && b.business_type !== "products" ? "También tenemos servicio fijo cada semana o cada mes." : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -66,8 +75,14 @@ export function buildSiteContent(
     services: services
       .filter((s) => s.active)
       .map((s) => ({ name: s.name, price: s.price === null ? null : Number(s.price) })),
+    currency: b.currency,
     logoUrl,
     photos,
-    ctaLabel: b.visit_before_quote ? "Agenda una visita gratis" : "Pide tu cotización",
+    ctaLabel:
+      b.business_type === "products"
+        ? "Pide precio o cotización"
+        : b.visit_before_quote
+          ? "Agenda una visita gratis"
+          : "Pide tu cotización",
   };
 }

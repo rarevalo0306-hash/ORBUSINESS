@@ -3,12 +3,16 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import {
-  QUESTIONS,
+  findCountry,
+  questionFor,
   extractWithRules,
   type BusinessPatch,
+  type BusinessRow,
   type Extraction,
   type QuestionKey,
 } from "@/lib/interview";
+
+type B = Pick<BusinessRow, "business_type">;
 
 // ---------- Proveedor de IA ----------
 // Se elige con NUNA_AI_PROVIDER = "deepseek" | "anthropic" | "rules".
@@ -39,34 +43,43 @@ const AnswerSchema = z.object({
     .describe("Acuse breve y cálido en español (1 oración). No hagas la siguiente pregunta."),
   text_value: z.string().nullable().describe("Valor de texto limpio para campos de texto"),
   bool_value: z.boolean().nullable().describe("Valor sí/no para campos booleanos"),
-  payment_timing: z.enum(["before", "deposit", "after"]).nullable(),
+  business_type: z.enum(["products", "services", "both"]).nullable(),
+  country: z.string().nullable().describe("País en español, solo para la pregunta de ubicación"),
+  payment_timing: z.enum(["before", "deposit", "after", "at_sale", "credit"]).nullable(),
   services: z
     .array(z.object({ name: z.string(), price: z.number().nullable() }))
     .nullable()
-    .describe("Productos o servicios (precio en dólares o null si no lo dijo), solo para esa pregunta"),
+    .describe("Productos o servicios (precio en la moneda del negocio, o null si no lo dijo), solo para esa pregunta"),
 });
 type Answer = z.infer<typeof AnswerSchema>;
 
 const SYSTEM =
   "Eres Nuna, la asistente de Orbusiness. Entrevistas al dueño de un negocio pequeño para armarle su página web y su CRM. " +
   "Tu trabajo aquí es entender UNA respuesta y extraer el dato pedido. Nunca inventes datos que el dueño no dijo. " +
-  "Si la respuesta no contesta la pregunta, marca understood=false y en reply pide el dato de forma amable.";
+  "Los negocios pueden ser tiendas que venden productos, negocios de servicios, o ambos. " +
+  "Si el dueño dice que la pregunta no aplica a su negocio, NO repitas la pregunta: marca understood=true y elige el valor que corresponde " +
+  "(por ejemplo, una tienda que no hace trabajos no visita antes de cotizar: bool_value=false; una tienda que cobra al vender: payment_timing=at_sale). " +
+  "Solo si la respuesta no tiene nada que ver con la pregunta, marca understood=false y en reply pide el dato de forma amable.";
 
-function userPrompt(key: QuestionKey, answer: string) {
-  const q = QUESTIONS.find((x) => x.key === key)!;
-  return `Pregunta (${key}): ${q.text}\nQué hay que extraer: ${q.hint}\n\nRespuesta del dueño:\n${answer}`;
+function userPrompt(key: QuestionKey, answer: string, b: B) {
+  const q = questionFor(key)!;
+  const kind = { products: "tienda (vende productos)", services: "servicios", both: "productos y servicios" }[b.business_type ?? ""];
+  return (
+    `${kind ? `Tipo de negocio: ${kind}.\n` : ""}` +
+    `Pregunta (${key}): ${q.text(b)}\nQué hay que extraer: ${q.hint(b)}\n\nRespuesta del dueño:\n${answer}`
+  );
 }
 
 const TEXT_FIELD: Partial<Record<QuestionKey, keyof BusinessPatch>> = {
   name: "name",
   owner: "owner_name",
   industry: "industry",
-  zone: "zone",
   hours: "hours",
   lead_sources: "lead_sources",
 };
 const BOOL_FIELD: Partial<Record<QuestionKey, keyof BusinessPatch>> = {
   visit_before_quote: "visit_before_quote",
+  offers_delivery: "offers_delivery",
   has_recurring_clients: "has_recurring_clients",
   quote_requires_approval: "quote_requires_approval",
 };
@@ -86,11 +99,23 @@ function toExtraction(key: QuestionKey, out: Answer): Extraction {
     if (out.bool_value === null) return { ok: false, ack: out.reply };
     Object.assign(patch, { [boolField]: out.bool_value });
   }
+  if (key === "location") {
+    const place = out.text_value?.trim() || out.country?.trim();
+    if (!place) return { ok: false, ack: out.reply };
+    const country = findCountry(out.country ?? "") ?? findCountry(place);
+    patch.zone = out.text_value?.trim() || null;
+    patch.country = country?.name ?? out.country?.trim() ?? null;
+    patch.currency = country?.currency ?? "USD";
+  }
+  if (key === "business_type") {
+    if (!out.business_type) return { ok: false, ack: out.reply };
+    patch.business_type = out.business_type;
+  }
   if (key === "payment_timing") {
     if (!out.payment_timing) return { ok: false, ack: out.reply };
     patch.payment_timing = out.payment_timing;
   }
-  if (key === "services") {
+  if (key === "offerings") {
     const services = (out.services ?? [])
       .filter((s) => s.name.trim() && (s.price === null || s.price >= 0))
       .map((s) => ({ name: s.name.trim(), price: s.price }));
@@ -105,9 +130,9 @@ function toExtraction(key: QuestionKey, out: Answer): Extraction {
 // DEEPSEEK_BASE_URL permite usar DeepSeek desde otro proveedor compatible (por ejemplo, con servidores en EE.UU.).
 const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com";
 const JSON_EXAMPLE =
-  '{"understood": true, "reply": "Anotado.", "text_value": "Jardines Ricardo", "bool_value": null, "payment_timing": null, "services": null}';
+  '{"understood": true, "reply": "Anotado.", "text_value": "Ferretería El Martillo", "bool_value": null, "business_type": null, "country": null, "payment_timing": null, "services": null}';
 
-async function askDeepSeek(key: QuestionKey, answer: string): Promise<Answer> {
+async function askDeepSeek(key: QuestionKey, answer: string, b: B): Promise<Answer> {
   const response = await fetch(`${DEEPSEEK_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
     headers: {
@@ -124,10 +149,11 @@ async function askDeepSeek(key: QuestionKey, answer: string): Promise<Answer> {
           content:
             `${SYSTEM}\n\nResponde solo con un objeto json con estas claves: ` +
             "understood (boolean), reply (string), text_value (string o null), bool_value (boolean o null), " +
-            'payment_timing ("before", "deposit", "after" o null), services (lista de {"name", "price"} donde price es número o null, o null). ' +
+            'business_type ("products", "services", "both" o null), country (string o null), ' +
+            'payment_timing ("before", "deposit", "after", "at_sale", "credit" o null), services (lista de {"name", "price"} donde price es número o null, o null). ' +
             `Ejemplo de json: ${JSON_EXAMPLE}`,
         },
-        { role: "user", content: userPrompt(key, answer) },
+        { role: "user", content: userPrompt(key, answer, b) },
       ],
     }),
     signal: AbortSignal.timeout(30_000),
@@ -144,14 +170,14 @@ async function askDeepSeek(key: QuestionKey, answer: string): Promise<Answer> {
 
 let anthropicClient: Anthropic | null = null;
 
-async function askClaude(key: QuestionKey, answer: string): Promise<Answer> {
+async function askClaude(key: QuestionKey, answer: string, b: B): Promise<Answer> {
   anthropicClient ??= new Anthropic();
   const response = await anthropicClient.messages.parse({
     model: process.env.ANTHROPIC_MODEL || "claude-opus-5-5",
     max_tokens: 2000,
     output_config: { effort: "low", format: zodOutputFormat(AnswerSchema) },
     system: SYSTEM,
-    messages: [{ role: "user", content: userPrompt(key, answer) }],
+    messages: [{ role: "user", content: userPrompt(key, answer, b) }],
   });
   if (!response.parsed_output) throw new Error("Claude no devolvió una respuesta válida");
   return response.parsed_output;
@@ -159,15 +185,15 @@ async function askClaude(key: QuestionKey, answer: string): Promise<Answer> {
 
 // ---------- Punto de entrada ----------
 
-export async function extractAnswer(key: QuestionKey, answer: string): Promise<Extraction> {
+export async function extractAnswer(key: QuestionKey, answer: string, b: B): Promise<Extraction> {
   const provider = nunaProvider();
-  if (provider === "rules") return extractWithRules(key, answer);
+  if (provider === "rules") return extractWithRules(key, answer, b);
   try {
-    const out = provider === "deepseek" ? await askDeepSeek(key, answer) : await askClaude(key, answer);
+    const out = provider === "deepseek" ? await askDeepSeek(key, answer, b) : await askClaude(key, answer, b);
     return toExtraction(key, out);
   } catch (error) {
     // Si la IA falla, Nuna no se detiene: entiende la respuesta con reglas.
     console.error(`Nuna (${provider}) falló, uso reglas:`, error);
-    return extractWithRules(key, answer);
+    return extractWithRules(key, answer, b);
   }
 }

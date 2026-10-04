@@ -3,19 +3,11 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Fish } from "@/components/fish";
 import { Button } from "@/components/ui";
-import { answerInterview, fillWithExample } from "./actions";
+import { answerInterview } from "./actions";
 
 type Message = { id: string; role: string; content: string };
 
-export function InterviewChat({
-  messages,
-  open,
-  example,
-}: {
-  messages: Message[];
-  open: boolean;
-  example: string | null;
-}) {
+export function InterviewChat({ messages, open }: { messages: Message[]; open: boolean }) {
   const [draft, setDraft] = useState("");
   const [pending, startTransition] = useTransition();
   const listRef = useRef<HTMLDivElement>(null);
@@ -58,50 +50,28 @@ export function InterviewChat({
       </div>
 
       {open && (
-        <>
-          <div className="flex flex-wrap gap-2">
-            {example && (
-              <button
-                type="button"
-                onClick={() => send(example)}
-                disabled={pending}
-                className="min-h-11 rounded-full border border-dashed border-line px-4 text-left text-sm text-muted hover:text-bone"
-              >
-                Ejemplo: “{example}”
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => startTransition(() => fillWithExample())}
-              disabled={pending}
-              className="min-h-11 rounded-full border border-line px-4 text-sm text-muted hover:text-bone"
-            >
-              Contestar todo con el ejemplo de Ricardo
-            </button>
-          </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              send(draft);
-            }}
-            className="flex gap-2"
-          >
-            <label htmlFor="answer" className="sr-only">
-              Tu respuesta
-            </label>
-            <input
-              id="answer"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              autoComplete="off"
-              placeholder="Escribe tu respuesta…"
-              className="min-h-12 flex-1 rounded-full border border-line bg-panel px-5 placeholder:text-muted/70"
-            />
-            <Button type="submit" disabled={pending || !draft.trim()}>
-              Enviar
-            </Button>
-          </form>
-        </>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            send(draft);
+          }}
+          className="flex gap-2"
+        >
+          <label htmlFor="answer" className="sr-only">
+            Tu respuesta
+          </label>
+          <input
+            id="answer"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            autoComplete="off"
+            placeholder="Escribe tu respuesta…"
+            className="min-h-12 flex-1 rounded-full border border-line bg-panel px-5 placeholder:text-muted/70"
+          />
+          <Button type="submit" disabled={pending || !draft.trim()}>
+            Enviar
+          </Button>
+        </form>
       )}
     </div>
   );
