@@ -1,69 +1,48 @@
-import Image from "next/image";
+import { Fish, Wordmark } from "@/components/fish";
+import { ButtonLink } from "@/components/ui";
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-16 px-4 py-8 sm:px-8">
+      <header className="flex items-center justify-between">
+        <Wordmark />
+        <ButtonLink href="/login" variant="ghost">
+          Entrar
+        </ButtonLink>
+      </header>
+
+      <section className="flex flex-col items-start gap-8 sm:flex-row sm:items-center">
+        <div className="flex flex-1 flex-col gap-6">
+          <h1 className="font-display text-4xl font-bold leading-[1.05] tracking-tight sm:text-6xl">
+            Tu negocio en línea, con una asistente que trabaja contigo
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="max-w-xl text-lg text-muted">
+            Platícale tu negocio a Nuna. Ella diseña tu página web, te arma un CRM a tu medida y se queda atendiendo a tus
+            clientes. Tú no conectas ni configuras nada.
           </p>
+          <div className="flex flex-wrap gap-3">
+            <ButtonLink href="/login?modo=registro">Empezar gratis</ButtonLink>
+            <ButtonLink href="/login" variant="ghost">
+              Ya tengo cuenta
+            </ButtonLink>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+        <Fish size={220} strokeWidth={0.9} className="hidden text-lime sm:block" />
+      </section>
+
+      <ol className="grid gap-4 sm:grid-cols-3">
+        {[
+          ["1", "Platica con Nuna", "Te hace preguntas sencillas para entender tu negocio y cómo trabajas."],
+          ["2", "Web y CRM listos", "Publica tu página y arma un CRM con las etapas de tu trabajo."],
+          ["3", "Nuna atiende", "Contesta, agenda, cotiza y da seguimiento por ti."],
+        ].map(([n, title, text]) => (
+          <li key={n} className="flex flex-col gap-2 rounded-2xl border border-line bg-panel p-5">
+            <span className="font-display text-2xl font-bold text-lime">{n}</span>
+            <span className="text-lg font-semibold">{title}</span>
+            <span className="text-muted">{text}</span>
+          </li>
+        ))}
+      </ol>
+    </main>
   );
 }

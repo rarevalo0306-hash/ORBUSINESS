@@ -1,0 +1,241 @@
+// Generado a partir del esquema de Supabase (proyecto orbusiness).
+// Para regenerarlo: Supabase → generate_typescript_types.
+
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
+
+type Table<Row, Insert, Update = Partial<Insert>> = {
+  Row: Row;
+  Insert: Insert;
+  Update: Update;
+  Relationships: [];
+};
+
+export type Database = {
+  __InternalSupabase: { PostgrestVersion: "14.18" };
+  public: {
+    Tables: {
+      businesses: Table<
+        {
+          id: string;
+          name: string;
+          slug: string | null;
+          owner_name: string | null;
+          industry: string | null;
+          zone: string | null;
+          hours: string | null;
+          lead_sources: string | null;
+          visit_before_quote: boolean | null;
+          payment_timing: string | null;
+          has_recurring_clients: boolean | null;
+          quote_requires_approval: boolean;
+          onboarding_step: string;
+          status: string;
+          created_at: string;
+          updated_at: string;
+        },
+        {
+          id?: string;
+          name: string;
+          slug?: string | null;
+          owner_name?: string | null;
+          industry?: string | null;
+          zone?: string | null;
+          hours?: string | null;
+          lead_sources?: string | null;
+          visit_before_quote?: boolean | null;
+          payment_timing?: string | null;
+          has_recurring_clients?: boolean | null;
+          quote_requires_approval?: boolean;
+          onboarding_step?: string;
+          status?: string;
+        }
+      >;
+      memberships: Table<
+        { business_id: string; user_id: string; role: string; created_at: string },
+        { business_id: string; user_id: string; role?: string }
+      >;
+      interview_messages: Table<
+        {
+          id: string;
+          business_id: string;
+          role: string;
+          step_key: string | null;
+          content: string;
+          created_at: string;
+        },
+        { business_id: string; role: string; step_key?: string | null; content: string }
+      >;
+      services: Table<
+        {
+          id: string;
+          business_id: string;
+          name: string;
+          price: number;
+          duration_minutes: number | null;
+          active: boolean;
+          sort: number;
+          created_at: string;
+        },
+        {
+          business_id: string;
+          name: string;
+          price?: number;
+          duration_minutes?: number | null;
+          active?: boolean;
+          sort?: number;
+        }
+      >;
+      brand_assets: Table<
+        { id: string; business_id: string; kind: string; storage_path: string; created_at: string },
+        { business_id: string; kind: string; storage_path: string }
+      >;
+      websites: Table<
+        {
+          business_id: string;
+          source: string;
+          existing_url: string | null;
+          subdomain: string | null;
+          custom_domain: string | null;
+          content: Json;
+          status: string;
+          published_at: string | null;
+          updated_at: string;
+        },
+        {
+          business_id: string;
+          source?: string;
+          existing_url?: string | null;
+          subdomain?: string | null;
+          custom_domain?: string | null;
+          content?: Json;
+          status?: string;
+          published_at?: string | null;
+        }
+      >;
+      pipeline_stages: Table<
+        {
+          id: string;
+          business_id: string;
+          position: number;
+          key: string;
+          name: string;
+          automations: Json;
+        },
+        {
+          business_id: string;
+          position: number;
+          key: string;
+          name: string;
+          automations?: Json;
+        }
+      >;
+      contacts: Table<
+        {
+          id: string;
+          business_id: string;
+          name: string;
+          phone: string | null;
+          email: string | null;
+          address: string | null;
+          stage_id: string | null;
+          source_channel: string | null;
+          interest: string | null;
+          custom_fields: Json;
+          created_at: string;
+          updated_at: string;
+        },
+        {
+          business_id: string;
+          name: string;
+          phone?: string | null;
+          email?: string | null;
+          address?: string | null;
+          stage_id?: string | null;
+          source_channel?: string | null;
+          interest?: string | null;
+          custom_fields?: Json;
+        }
+      >;
+      conversations: Table<
+        {
+          id: string;
+          business_id: string;
+          contact_id: string | null;
+          channel: string;
+          status: string;
+          last_message_at: string;
+          created_at: string;
+        },
+        { business_id: string; contact_id?: string | null; channel: string; status?: string }
+      >;
+      messages: Table<
+        {
+          id: string;
+          business_id: string;
+          conversation_id: string;
+          direction: string;
+          author: string;
+          channel: string;
+          body: string;
+          created_at: string;
+        },
+        {
+          business_id: string;
+          conversation_id: string;
+          direction: string;
+          author: string;
+          channel: string;
+          body: string;
+        }
+      >;
+      audit_log: Table<
+        {
+          id: number;
+          business_id: string;
+          actor: string;
+          actor_user_id: string | null;
+          action: string;
+          entity: string | null;
+          entity_id: string | null;
+          data: Json;
+          created_at: string;
+        },
+        {
+          business_id: string;
+          actor: string;
+          actor_user_id?: string | null;
+          action: string;
+          entity?: string | null;
+          entity_id?: string | null;
+          data?: Json;
+        }
+      >;
+    };
+    Views: { [_ in never]: never };
+    Functions: {
+      create_business: { Args: { p_name: string }; Returns: string };
+      next_quote_number: { Args: { p_business: string }; Returns: number };
+      submit_lead: {
+        Args: {
+          p_subdomain: string;
+          p_name: string;
+          p_phone: string;
+          p_email: string;
+          p_message: string;
+        };
+        Returns: boolean;
+      };
+    };
+    Enums: { [_ in never]: never };
+    CompositeTypes: { [_ in never]: never };
+  };
+};
+
+export type Tables<T extends keyof Database["public"]["Tables"]> =
+  Database["public"]["Tables"][T]["Row"];
