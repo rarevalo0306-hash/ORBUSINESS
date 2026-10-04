@@ -26,5 +26,5 @@ export default async function PublicSitePage(props: PageProps<"/sitio/[slug]">) 
   const { slug } = await props.params;
   const site = await loadSite(slug);
   if (!site) notFound();
-  return <SiteView site={site} leadForm={<LeadForm slug={slug} cta={site.ctaLabel} />} />;
+  return <SiteView site={site} leadForm={<LeadForm slug={slug} cta={site.copy?.cta ?? site.ctaLabel} copy={site.copy} />} />;
 }

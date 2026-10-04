@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireBusiness } from "@/lib/business";
+import { marketFor, normalizePhone } from "@/lib/markets";
 
 export async function addContact(formData: FormData) {
   const { supabase, user, business } = await requireBusiness();
@@ -21,7 +22,10 @@ export async function addContact(formData: FormData) {
     .insert({
       business_id: business.id,
       name,
-      phone: value("phone", 40),
+      phone: (() => {
+        const raw = value("phone", 40);
+        return raw ? (normalizePhone(raw, marketFor(business.country_code)) ?? raw) : null;
+      })(),
       email: value("email", 200)?.toLowerCase() ?? null,
       interest: value("interest", 200),
       source_channel: "manual",

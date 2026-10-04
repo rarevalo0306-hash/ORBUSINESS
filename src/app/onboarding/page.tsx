@@ -13,7 +13,7 @@ export default async function OnboardingPage() {
       business_id: businessId,
       role: "nuna",
       step_key: QUESTIONS[0].key,
-      content: QUESTIONS[0].text({ business_type: null }),
+      content: QUESTIONS[0].text({ business_type: null, country_code: null }),
     });
     await supabase.from("audit_log").insert({
       business_id: businessId,

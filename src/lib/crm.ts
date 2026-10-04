@@ -3,6 +3,7 @@
 // tienen recorridos distintos.
 
 import type { Tables } from "@/lib/database.types";
+import { marketFor } from "@/lib/markets";
 
 type Workflow = Pick<
   Tables<"businesses">,
@@ -13,6 +14,7 @@ type Workflow = Pick<
   | "quote_requires_approval"
   | "offers_delivery"
   | "industry"
+  | "country_code"
 >;
 
 export type StageDef = { key: string; name: string; automations: string[] };
@@ -99,14 +101,16 @@ export function stagesFor(b: Workflow): StageDef[] {
 }
 
 export function fieldsFor(b: Workflow): string[] {
-  const f = ["Nombre, teléfono y email"];
+  const m = marketFor(b.country_code);
+  const references = m && /referencia/.test(m.addressStyle) ? " con puntos de referencia" : "";
+  const f = [`Nombre, WhatsApp${m ? ` (+${m.dialCode})` : ""} y email`];
   if (b.business_type === "products") {
     f.push("Productos que le interesan");
-    if (b.offers_delivery) f.push("Dirección de entrega");
+    if (b.offers_delivery) f.push(`Dirección de entrega${references}`);
     if (b.payment_timing === "credit") f.push("Saldo a crédito y fecha de pago");
   } else {
     f.push(
-      "Dirección del trabajo",
+      `Dirección del trabajo${references}`,
       "Servicio que le interesa",
       (b.industry ?? "").toLowerCase().includes("jardin") ? "Tamaño del jardín y fotos del lugar" : "Detalles y fotos del trabajo",
     );

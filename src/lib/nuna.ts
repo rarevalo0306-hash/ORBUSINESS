@@ -2,8 +2,10 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
+import { marketContext, marketFor, normalizePhone } from "@/lib/markets";
 import {
-  findCountry,
+  currencyPatch,
+  locationCheck,
   questionFor,
   extractWithRules,
   type BusinessPatch,
@@ -12,7 +14,7 @@ import {
   type QuestionKey,
 } from "@/lib/interview";
 
-type B = Pick<BusinessRow, "business_type">;
+type B = Pick<BusinessRow, "business_type" | "country_code">;
 
 // ---------- Proveedor de IA ----------
 // Se elige con NUNA_AI_PROVIDER = "deepseek" | "anthropic" | "rules".
@@ -46,6 +48,9 @@ const AnswerSchema = z.object({
   business_type: z.enum(["products", "services", "both"]).nullable(),
   country: z.string().nullable().describe("País en español, solo para la pregunta de ubicación"),
   payment_timing: z.enum(["before", "deposit", "after", "at_sale", "credit"]).nullable(),
+  currency_choice: z.enum(["local", "other", "both"]).nullable(),
+  payment_methods: z.array(z.string()).nullable().describe("Formas de pago con su nombre local"),
+  address_form: z.enum(["tu", "usted", "vos"]).nullable(),
   services: z
     .array(z.object({ name: z.string(), price: z.number().nullable() }))
     .nullable()
@@ -59,12 +64,16 @@ const SYSTEM =
   "Los negocios pueden ser tiendas que venden productos, negocios de servicios, o ambos. " +
   "Si el dueño dice que la pregunta no aplica a su negocio, NO repitas la pregunta: marca understood=true y elige el valor que corresponde " +
   "(por ejemplo, una tienda que no hace trabajos no visita antes de cotizar: bool_value=false; una tienda que cobra al vender: payment_timing=at_sale). " +
-  "Solo si la respuesta no tiene nada que ver con la pregunta, marca understood=false y en reply pide el dato de forma amable.";
+  "Solo si la respuesta no tiene nada que ver con la pregunta, marca understood=false y en reply pide el dato de forma amable. " +
+  "Entiende las palabras y costumbres del país del negocio (por ejemplo, en Nicaragua 'pesos' son córdobas y 'fiado' es crédito). " +
+  "En reply habla en español natural de ese país, cálido y breve; nunca uses 'vosotros'.";
 
 function userPrompt(key: QuestionKey, answer: string, b: B) {
   const q = questionFor(key)!;
   const kind = { products: "tienda (vende productos)", services: "servicios", both: "productos y servicios" }[b.business_type ?? ""];
+  const market = marketContext(marketFor(b.country_code));
   return (
+    `${market ? `${market}\n` : ""}` +
     `${kind ? `Tipo de negocio: ${kind}.\n` : ""}` +
     `Pregunta (${key}): ${q.text(b)}\nQué hay que extraer: ${q.hint(b)}\n\nRespuesta del dueño:\n${answer}`
   );
@@ -75,6 +84,7 @@ const TEXT_FIELD: Partial<Record<QuestionKey, keyof BusinessPatch>> = {
   owner: "owner_name",
   industry: "industry",
   hours: "hours",
+  address: "address",
   lead_sources: "lead_sources",
 };
 const BOOL_FIELD: Partial<Record<QuestionKey, keyof BusinessPatch>> = {
@@ -85,7 +95,7 @@ const BOOL_FIELD: Partial<Record<QuestionKey, keyof BusinessPatch>> = {
 };
 
 // Convierte la respuesta de la IA en cambios para el negocio.
-function toExtraction(key: QuestionKey, out: Answer): Extraction {
+function toExtraction(key: QuestionKey, out: Answer, b: B): Extraction {
   if (!out.understood) return { ok: false, ack: out.reply };
 
   const patch: BusinessPatch = {};
@@ -102,10 +112,28 @@ function toExtraction(key: QuestionKey, out: Answer): Extraction {
   if (key === "location") {
     const place = out.text_value?.trim() || out.country?.trim();
     if (!place) return { ok: false, ack: out.reply };
-    const country = findCountry(out.country ?? "") ?? findCountry(place);
-    patch.zone = out.text_value?.trim() || null;
-    patch.country = country?.name ?? out.country?.trim() ?? null;
-    patch.currency = country?.currency ?? "USD";
+    const check = locationCheck(out.text_value?.trim() ?? place, out.country?.trim() || null);
+    if (!check.ok) return check;
+    Object.assign(patch, check.patch);
+  }
+  if (key === "currencies") {
+    if (!out.currency_choice) return { ok: false, ack: out.reply };
+    Object.assign(patch, currencyPatch(out.currency_choice, b));
+  }
+  if (key === "phone") {
+    const phone = normalizePhone(out.text_value ?? "", marketFor(b.country_code));
+    if (!phone) return { ok: false, ack: out.reply };
+    patch.phone = phone;
+  }
+  if (key === "payment_methods") {
+    const methods = (out.payment_methods ?? []).map((m) => m.trim()).filter(Boolean);
+    if (!methods.length) return { ok: false, ack: out.reply };
+    patch.payment_methods = methods;
+  }
+  if (key === "address_form") {
+    const form = out.address_form ?? marketFor(b.country_code)?.addressForm ?? null;
+    if (!form) return { ok: false, ack: out.reply };
+    patch.address_form = form;
   }
   if (key === "business_type") {
     if (!out.business_type) return { ok: false, ack: out.reply };
@@ -130,7 +158,7 @@ function toExtraction(key: QuestionKey, out: Answer): Extraction {
 // DEEPSEEK_BASE_URL permite usar DeepSeek desde otro proveedor compatible (por ejemplo, con servidores en EE.UU.).
 const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com";
 const JSON_EXAMPLE =
-  '{"understood": true, "reply": "Anotado.", "text_value": "Ferretería El Martillo", "bool_value": null, "business_type": null, "country": null, "payment_timing": null, "services": null}';
+  '{"understood": true, "reply": "Anotado.", "text_value": "Ferretería El Martillo", "bool_value": null, "business_type": null, "country": null, "payment_timing": null, "services": null, "currency_choice": null, "payment_methods": null, "address_form": null}';
 
 async function askDeepSeek(key: QuestionKey, answer: string, b: B): Promise<Answer> {
   const response = await fetch(`${DEEPSEEK_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
@@ -150,7 +178,8 @@ async function askDeepSeek(key: QuestionKey, answer: string, b: B): Promise<Answ
             `${SYSTEM}\n\nResponde solo con un objeto json con estas claves: ` +
             "understood (boolean), reply (string), text_value (string o null), bool_value (boolean o null), " +
             'business_type ("products", "services", "both" o null), country (string o null), ' +
-            'payment_timing ("before", "deposit", "after", "at_sale", "credit" o null), services (lista de {"name", "price"} donde price es número o null, o null). ' +
+            'payment_timing ("before", "deposit", "after", "at_sale", "credit" o null), services (lista de {"name", "price"} donde price es número o null, o null), ' +
+            'currency_choice ("local", "other", "both" o null), payment_methods (lista de textos o null), address_form ("tu", "usted", "vos" o null). ' +
             `Ejemplo de json: ${JSON_EXAMPLE}`,
         },
         { role: "user", content: userPrompt(key, answer, b) },
@@ -190,7 +219,7 @@ export async function extractAnswer(key: QuestionKey, answer: string, b: B): Pro
   if (provider === "rules") return extractWithRules(key, answer, b);
   try {
     const out = provider === "deepseek" ? await askDeepSeek(key, answer, b) : await askClaude(key, answer, b);
-    return toExtraction(key, out);
+    return toExtraction(key, out, b);
   } catch (error) {
     // Si la IA falla, Nuna no se detiene: entiende la respuesta con reglas.
     console.error(`Nuna (${provider}) falló, uso reglas:`, error);

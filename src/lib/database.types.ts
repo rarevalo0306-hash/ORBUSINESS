@@ -38,6 +38,12 @@ export type Database = {
           country: string | null;
           currency: string;
           offers_delivery: boolean | null;
+          country_code: string | null;
+          secondary_currency: string | null;
+          phone: string | null;
+          address: string | null;
+          payment_methods: string[];
+          address_form: string | null;
           onboarding_step: string;
           status: string;
           created_at: string;
@@ -60,6 +66,12 @@ export type Database = {
           country?: string | null;
           currency?: string;
           offers_delivery?: boolean | null;
+          country_code?: string | null;
+          secondary_currency?: string | null;
+          phone?: string | null;
+          address?: string | null;
+          payment_methods?: string[];
+          address_form?: string | null;
           onboarding_step?: string;
           status?: string;
         }

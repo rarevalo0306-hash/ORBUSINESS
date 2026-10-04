@@ -1,17 +1,18 @@
 "use client";
 
 import { useActionState } from "react";
+import type { SiteCopy } from "@/lib/site";
 import { submitLead, type LeadState } from "./actions";
 
 const input = "min-h-12 rounded-xl border border-[#c9d2bd] bg-white px-4 text-[#1f2a1c] placeholder:text-[#7d8a76]";
 
-export function LeadForm({ slug, cta }: { slug: string; cta: string }) {
+export function LeadForm({ slug, cta, copy }: { slug: string; cta: string; copy?: SiteCopy }) {
   const [state, action, pending] = useActionState<LeadState, FormData>(submitLead.bind(null, slug), {});
 
   if (state.ok) {
     return (
       <p role="status" className="rounded-2xl bg-[#dfe6d6] p-6 text-lg">
-        ¡Gracias! Recibimos tus datos y te contactamos muy pronto.
+        {copy?.thanks ?? "¡Gracias! Recibimos tus datos y te contactamos muy pronto."}
       </p>
     );
   }
@@ -19,7 +20,7 @@ export function LeadForm({ slug, cta }: { slug: string; cta: string }) {
   return (
     <form action={action} className="flex flex-col gap-3">
       <label className="flex flex-col gap-1 text-sm font-semibold">
-        Tu nombre
+        {copy?.nameLabel ?? "Tu nombre"}
         <input name="name" required maxLength={120} autoComplete="name" className={input} />
       </label>
       <label className="flex flex-col gap-1 text-sm font-semibold">
@@ -31,7 +32,7 @@ export function LeadForm({ slug, cta }: { slug: string; cta: string }) {
         <input name="email" type="email" maxLength={200} autoComplete="email" className={input} />
       </label>
       <label className="flex flex-col gap-1 text-sm font-semibold">
-        ¿Qué necesitas?
+        {copy?.needLabel ?? "¿Qué necesitas?"}
         <textarea name="message" rows={3} maxLength={2000} className={`${input} py-3`} />
       </label>
       {state.error && (

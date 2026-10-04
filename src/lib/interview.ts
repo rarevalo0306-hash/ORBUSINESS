@@ -3,6 +3,7 @@
 // si no, o si la IA falla, entiende las respuestas con las reglas de este archivo.
 
 import type { Database } from "@/lib/database.types";
+import { AVAILABILITY, MARKETS, findMarket, isActiveMarket, marketFor, normalizePhone, type AddressForm } from "@/lib/markets";
 
 export type BusinessRow = Database["public"]["Tables"]["businesses"]["Row"];
 export type BusinessPatch = Database["public"]["Tables"]["businesses"]["Update"];
@@ -16,17 +17,43 @@ export type QuestionKey =
   | "business_type"
   | "industry"
   | "offerings"
+  | "currencies"
   | "hours"
+  | "phone"
+  | "address"
   | "lead_sources"
   | "visit_before_quote"
   | "payment_timing"
+  | "payment_methods"
   | "offers_delivery"
   | "has_recurring_clients"
+  | "address_form"
   | "quote_requires_approval";
 
-type B = Pick<BusinessRow, "business_type">;
+type B = Pick<BusinessRow, "business_type" | "country_code">;
 const sells = (b: B) => b.business_type === "products" || b.business_type === "both";
 const serves = (b: B) => b.business_type !== "products"; // servicios, ambos, o aún no se sabe
+
+const CURRENCY_NAMES: Record<string, string> = {
+  NIO: "córdobas",
+  USD: "dólares",
+  CRC: "colones",
+  VES: "bolívares",
+  CAD: "dólares canadienses",
+  MXN: "pesos",
+  GTQ: "quetzales",
+  HNL: "lempiras",
+  COP: "pesos",
+  PEN: "soles",
+  BOB: "bolivianos",
+  CLP: "pesos",
+  ARS: "pesos",
+  UYU: "pesos",
+  PYG: "guaraníes",
+  DOP: "pesos",
+};
+export const currencyName = (code: string) => CURRENCY_NAMES[code] ?? code;
+const FORM_NAMES: Record<AddressForm, string> = { tu: "de tú", usted: "de usted", vos: "de vos" };
 
 export type Question = {
   key: QuestionKey;
@@ -80,10 +107,39 @@ export const QUESTIONS: Question[] = [
       "Lista de productos o categorías de productos y/o servicios. Precio solo si el dueño lo dijo (número en su moneda); si no, null. Si describe la tienda en general, resume en 3 a 6 categorías claras.",
   },
   {
+    key: "currencies",
+    label: "Moneda de tus precios",
+    text: (b) => {
+      const m = marketFor(b.country_code)!;
+      return `¿Tus precios los manejas en ${currencyName(m.currency)}, en ${currencyName(m.secondCurrency!)}, o en los dos?`;
+    },
+    hint: (b) => {
+      const m = marketFor(b.country_code);
+      return `currency_choice: local (solo ${m ? currencyName(m.currency) : "moneda local"}), other (solo ${m?.secondCurrency ? currencyName(m.secondCurrency) : "la otra moneda"}), both (las dos).`;
+    },
+    applies: (b) => Boolean(marketFor(b.country_code)?.secondCurrency),
+  },
+  {
     key: "hours",
     label: "Horario",
     text: () => "¿Qué días y horas abres o trabajas?",
     hint: () => "Días y horario.",
+  },
+  {
+    key: "phone",
+    label: "WhatsApp del negocio",
+    text: () => "¿Cuál es el número de WhatsApp o teléfono del negocio? Ahí te van a escribir tus clientes.",
+    hint: () => "text_value = el número tal como lo dijo, con o sin código de país.",
+  },
+  {
+    key: "address",
+    label: "Dirección",
+    text: (b) => {
+      const m = marketFor(b.country_code);
+      return `¿Cuál es la dirección del negocio? Dímela como se la das a tus clientes${m ? ` (por ejemplo: ${m.addressStyle})` : ""}.`;
+    },
+    hint: () => "text_value = la dirección tal como la daría a un cliente, con sus puntos de referencia.",
+    applies: sells,
   },
   {
     key: "lead_sources",
@@ -112,6 +168,15 @@ export const QUESTIONS: Question[] = [
       "payment_timing: at_sale (paga al momento de la compra), deposit (anticipo o apartado), credit (a crédito o fiado), before (antes de empezar un trabajo), after (al terminar un trabajo). Elige la que más se use.",
   },
   {
+    key: "payment_methods",
+    label: "Formas de pago",
+    text: (b) => {
+      const m = marketFor(b.country_code);
+      return `¿Qué formas de pago aceptas? Por ejemplo: ${(m?.paymentMethods ?? ["Efectivo", "Transferencia", "Tarjeta"]).join(", ")}.`;
+    },
+    hint: () => "payment_methods = lista de formas de pago que mencionó, con su nombre local (Yape, SINPE Móvil, Nequi, OXXO…).",
+  },
+  {
     key: "offers_delivery",
     label: "Entregas a domicilio",
     text: () => "¿Haces entregas a domicilio?",
@@ -126,6 +191,15 @@ export const QUESTIONS: Question[] = [
         ? "¿Tienes clientes que te compran seguido, como contratistas u otros negocios?"
         : "¿Tienes clientes que repiten cada semana o cada mes?",
     hint: () => "bool_value: true si tiene clientes frecuentes o recurrentes.",
+  },
+  {
+    key: "address_form",
+    label: "Trato con tus clientes",
+    text: (b) => {
+      const m = marketFor(b.country_code);
+      return `¿Cómo quieres que les hable a tus clientes: de tú, de usted o de vos?${m ? ` En ${m.name} lo más común es ${FORM_NAMES[m.addressForm]}.` : ""}`;
+    },
+    hint: () => "address_form: tu, usted o vos. Si le da igual, usa el trato habitual del país.",
   },
   {
     key: "quote_requires_approval",
@@ -156,36 +230,7 @@ export function nextQuestion(fromIndex: number, b: B): Question | null {
   return null;
 }
 
-// ---------- país y moneda ----------
-
-const COUNTRIES: [string, string, string][] = [
-  // [palabra para reconocerlo, nombre, moneda]
-  ["nicaragua", "Nicaragua", "NIO"],
-  ["mexico", "México", "MXN"],
-  ["guatemala", "Guatemala", "GTQ"],
-  ["honduras", "Honduras", "HNL"],
-  ["salvador", "El Salvador", "USD"],
-  ["costa rica", "Costa Rica", "CRC"],
-  ["panama", "Panamá", "USD"],
-  ["colombia", "Colombia", "COP"],
-  ["peru", "Perú", "PEN"],
-  ["ecuador", "Ecuador", "USD"],
-  ["dominicana", "República Dominicana", "DOP"],
-  ["puerto rico", "Puerto Rico", "USD"],
-  ["espana", "España", "EUR"],
-  ["chile", "Chile", "CLP"],
-  ["argentina", "Argentina", "ARS"],
-  ["estados unidos", "Estados Unidos", "USD"],
-  ["usa", "Estados Unidos", "USD"],
-  ["eeuu", "Estados Unidos", "USD"],
-  ["ee.uu", "Estados Unidos", "USD"],
-];
-
-export function findCountry(text: string): { name: string; currency: string } | null {
-  const t = norm(text);
-  const hit = COUNTRIES.find(([k]) => t.includes(k));
-  return hit ? { name: hit[1], currency: hit[2] } : null;
-}
+// ---------- moneda ----------
 
 const SYMBOLS: Record<string, string> = {
   USD: "$",
@@ -200,6 +245,11 @@ const SYMBOLS: Record<string, string> = {
   EUR: "€",
   CLP: "$",
   ARS: "$",
+  UYU: "$U",
+  PYG: "₲",
+  BOB: "Bs",
+  VES: "Bs.",
+  CAD: "CA$",
 };
 
 export function money(n: number, currency = "USD") {
@@ -209,6 +259,49 @@ export function money(n: number, currency = "USD") {
 
 export function priceLabel(price: number | null, currency = "USD") {
   return price === null ? "precio a consultar" : `desde ${money(price, currency)}`;
+}
+
+// Moneda de los precios según la respuesta: solo local, solo la otra, o las dos.
+export function currencyPatch(choice: "local" | "other" | "both", b: B): BusinessPatch {
+  const m = marketFor(b.country_code);
+  if (!m?.secondCurrency) return {};
+  if (choice === "other") return { currency: m.secondCurrency, secondary_currency: null };
+  if (choice === "both") return { currency: m.currency, secondary_currency: m.secondCurrency };
+  return { currency: m.currency, secondary_currency: null };
+}
+
+// Respuesta de ubicación: el país debe ser uno donde Orbusiness ya está disponible.
+export function locationCheck(text: string, countryHint?: string | null): { ok: true; patch: BusinessPatch } | { ok: false; ack: string } {
+  const m = (countryHint ? findMarket(countryHint) : null) ?? findMarket(text);
+  if (!m) return { ok: false, ack: "¿En qué país está tu negocio? Así uso la moneda y las costumbres de ahí." };
+  if (!isActiveMarket(m))
+    return {
+      ok: false,
+      ack: `Por ahora Orbusiness está disponible en ${AVAILABILITY}. Muy pronto llegamos a ${m.name}. Si tu negocio está en alguno de esos países, dime en cuál.`,
+    };
+  return { ok: true, patch: locationPatch(text, m.name) };
+}
+
+export function locationPatch(text: string, countryHint?: string | null): BusinessPatch {
+  const m = (countryHint ? findMarket(countryHint) : null) ?? findMarket(text);
+  return {
+    zone: text || null,
+    country: m?.name ?? countryHint ?? null,
+    country_code: m?.code ?? null,
+    currency: m?.currency ?? "USD",
+    secondary_currency: null,
+    address_form: m?.addressForm ?? null,
+  };
+}
+
+function currencyWords(code: string): string[] {
+  const words: Record<string, string[]> = {
+    NIO: ["cordoba", "peso", "c$"],
+    USD: ["dolar", "dolares", "usd", "verdes"],
+    CRC: ["colon", "colones", "rojo", "teja"],
+    VES: ["bolivar", "bolivares", "bs"],
+  };
+  return words[code] ?? [norm(currencyName(code))];
 }
 
 // ---------- utilidades de texto ----------
@@ -262,8 +355,24 @@ export function describeAnswer(key: QuestionKey, b: BusinessRow, services: Servi
       return b.name === "Mi negocio" ? null : b.name;
     case "owner":
       return b.owner_name;
-    case "location":
-      return [b.zone, b.country].filter(Boolean).join(", ") || null;
+    case "location": {
+      const where = [b.zone, b.country && !norm(b.zone ?? "").includes(norm(b.country)) ? b.country : null];
+      return where.filter(Boolean).join(", ") || null;
+    }
+    case "currencies":
+      return b.secondary_currency
+        ? `${currencyName(b.currency)} y ${currencyName(b.secondary_currency)}`
+        : b.country_code
+          ? `Solo ${currencyName(b.currency)}`
+          : null;
+    case "phone":
+      return b.phone;
+    case "address":
+      return b.address;
+    case "payment_methods":
+      return b.payment_methods.length ? b.payment_methods.join(", ") : null;
+    case "address_form":
+      return b.address_form ? FORM_NAMES[b.address_form as AddressForm].replace("de ", "De ") : null;
     case "business_type":
       return { products: "Vende productos", services: "Da servicios", both: "Productos y servicios" }[b.business_type ?? ""] ?? null;
     case "industry":
@@ -308,12 +417,44 @@ export function extractWithRules(key: QuestionKey, raw: string, b: B): Extractio
 
   switch (key) {
     case "location": {
-      const country = findCountry(text);
-      return {
-        ok: true,
-        ack: country ? `Anotado: ${country.name}.` : "Anotado.",
-        patch: { zone: text, country: country?.name ?? null, currency: country?.currency ?? "USD" },
-      };
+      const check = locationCheck(text);
+      if (!check.ok) return check;
+      return { ok: true, ack: `Anotado: ${check.patch.country}.`, patch: check.patch };
+    }
+    case "currencies": {
+      const m = marketFor(b.country_code);
+      const local = m ? currencyWords(m.currency) : [];
+      const other = m?.secondCurrency ? currencyWords(m.secondCurrency) : [];
+      const saysLocal = has(t, local);
+      const saysOther = has(t, other);
+      const choice = has(t, ["ambos", "las dos", "los dos", "las 2", "los 2"]) || (saysLocal && saysOther) ? "both" : saysOther ? "other" : "local";
+      const patch = currencyPatch(choice, b);
+      const label = patch.secondary_currency
+        ? `${currencyName(patch.currency!)} y ${currencyName(patch.secondary_currency)}`
+        : currencyName(patch.currency ?? "USD");
+      return { ok: true, ack: `Anotado: precios en ${label}.`, patch };
+    }
+    case "phone": {
+      const phone = normalizePhone(text, marketFor(b.country_code));
+      if (!phone) return { ok: false, ack: "No alcancé a leer el número. ¿Me lo escribes con todos los dígitos?" };
+      return { ok: true, ack: `Anotado: ${phone}.`, patch: { phone } };
+    }
+    case "address":
+      return { ok: true, ack: "Anotada la dirección.", patch: { address: text } };
+    case "payment_methods": {
+      const known = marketFor(b.country_code)?.paymentMethods ?? MARKETS[0].paymentMethods;
+      const found = known.filter((p) => t.includes(norm(p).split(/[\s(/]/)[0]));
+      for (const [word, label] of [["efectivo", "Efectivo"], ["tarjeta", "Tarjeta"], ["transferencia", "Transferencia"], ["fiado", "Fiado / crédito"], ["credito", "Fiado / crédito"]] as const) {
+        if (t.includes(word) && !found.some((f) => norm(f).includes(word))) found.push(label);
+      }
+      const methods = found.length ? found : text.split(/[,;\n]+|\s+y\s+/).map((x) => cap(x)).filter(Boolean);
+      return { ok: true, ack: `Anotado: ${methods.join(", ")}.`, patch: { payment_methods: methods } };
+    }
+    case "address_form": {
+      const w = words(t);
+      const form: AddressForm | null = w.includes("usted") ? "usted" : w.includes("vos") ? "vos" : w.includes("tu") || t.includes("tute") ? "tu" : marketFor(b.country_code)?.addressForm ?? null;
+      if (!form) return { ok: false, ack: "¿De tú, de usted o de vos?" };
+      return { ok: true, ack: `Perfecto: les hablo ${FORM_NAMES[form]}.`, patch: { address_form: form } };
     }
     case "business_type": {
       const product = has(t, ["producto", "vendo", "venta", "tienda", "articulo", "mercancia", "ferreteria"]);

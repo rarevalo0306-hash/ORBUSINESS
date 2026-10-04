@@ -1,10 +1,19 @@
 import type { ReactNode } from "react";
-import { priceLabel } from "@/lib/interview";
+import { currencyName, priceLabel } from "@/lib/interview";
 import type { SiteContent } from "@/lib/site";
 
 // La página web de un negocio. Usa una paleta clara propia (no la de Orbusiness)
 // porque es la página del negocio, no de la plataforma.
+function whatsappLink(phone: string, name: string) {
+  const text = encodeURIComponent(`Hola ${name}, quisiera información.`);
+  return `https://wa.me/${phone.replace(/\D/g, "")}?text=${text}`;
+}
+
 export function SiteView({ site, leadForm }: { site: SiteContent; leadForm?: ReactNode }) {
+  const cta = site.copy?.cta ?? site.ctaLabel;
+  const wa = site.phone ? whatsappLink(site.phone, site.name) : null;
+  const waLabel = site.copy?.whatsapp ?? "Escríbenos por WhatsApp";
+  const waFirst = Boolean(wa && site.whatsappFirst !== false);
   const initials = site.name
     .split(/\s+/)
     .map((w) => w.charAt(0))
@@ -26,9 +35,15 @@ export function SiteView({ site, leadForm }: { site: SiteContent; leadForm?: Rea
           )}
           <span className="font-display text-xl font-bold">{site.name}</span>
         </div>
-        <a href="#cotizacion" className="hidden min-h-11 items-center rounded-full bg-[#1f2a1c] px-5 font-semibold text-[#f4f1ea] sm:inline-flex">
-          {site.ctaLabel}
-        </a>
+        {waFirst ? (
+          <a href={wa!} target="_blank" rel="noopener" className="hidden min-h-11 items-center rounded-full bg-[#1d7a45] px-5 font-semibold text-white sm:inline-flex">
+            WhatsApp
+          </a>
+        ) : (
+          <a href="#cotizacion" className="hidden min-h-11 items-center rounded-full bg-[#1f2a1c] px-5 font-semibold text-[#f4f1ea] sm:inline-flex">
+            {cta}
+          </a>
+        )}
       </header>
 
       <section className="mx-auto grid max-w-5xl gap-8 px-5 py-10 md:grid-cols-2 md:items-center">
@@ -39,23 +54,38 @@ export function SiteView({ site, leadForm }: { site: SiteContent; leadForm?: Rea
           </p>
           <h1 className="font-display text-4xl font-bold leading-tight sm:text-5xl">{site.tagline}</h1>
           <p className="text-lg text-[#3d4a38]">{site.intro}</p>
-          <a href="#cotizacion" className="inline-flex min-h-12 items-center self-start rounded-full bg-[#1f2a1c] px-6 font-semibold text-[#f4f1ea]">
-            {site.ctaLabel}
-          </a>
+          <div className="flex flex-wrap gap-3">
+            {waFirst && (
+              <a href={wa!} target="_blank" rel="noopener" className="inline-flex min-h-12 items-center rounded-full bg-[#1d7a45] px-6 font-semibold text-white">
+                {waLabel}
+              </a>
+            )}
+            <a
+              href="#cotizacion"
+              className={`inline-flex min-h-12 items-center rounded-full px-6 font-semibold ${waFirst ? "border border-[#1f2a1c]" : "bg-[#1f2a1c] text-[#f4f1ea]"}`}
+            >
+              {cta}
+            </a>
+          </div>
         </div>
         {site.photos[0] ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={site.photos[0]} alt={`Trabajo de ${site.name}`} className="aspect-[4/3] w-full rounded-2xl object-cover" />
         ) : (
           <div className="flex aspect-[4/3] w-full items-center justify-center rounded-2xl bg-[#dfe6d6] text-[#4a6b3e]">
-            Aquí va una foto de tu trabajo
+            {site.name}
           </div>
         )}
       </section>
 
       {site.services.length > 0 && (
         <section className="mx-auto max-w-5xl px-5 py-10">
-          <h2 className="mb-5 font-display text-3xl font-bold">Lo que ofrecemos</h2>
+          <h2 className="mb-2 font-display text-3xl font-bold">Lo que ofrecemos</h2>
+          {site.secondaryCurrency && (
+            <p className="mb-5 text-[#3d4a38]">
+              Precios en {currencyName(site.currency)}; también aceptamos {currencyName(site.secondaryCurrency)}.
+            </p>
+          )}
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {site.services.map((s) => (
               <li key={s.name} className="flex flex-col gap-1 rounded-2xl border border-[#d6dccd] bg-white p-5">
@@ -81,9 +111,43 @@ export function SiteView({ site, leadForm }: { site: SiteContent; leadForm?: Rea
 
       <section id="cotizacion" className="mx-auto grid max-w-5xl gap-8 px-5 py-12 md:grid-cols-2">
         <div className="flex flex-col gap-3">
-          <h2 className="font-display text-3xl font-bold">{site.ctaLabel}</h2>
-          <p className="text-[#3d4a38]">Déjanos tus datos y te contestamos hoy mismo.</p>
-          {site.hours && <p className="text-[#3d4a38]">Horario: {site.hours}</p>}
+          <h2 className="font-display text-3xl font-bold">{cta}</h2>
+          <p className="text-[#3d4a38]">{site.copy?.leadIntro ?? "Déjanos tus datos y te contestamos hoy mismo."}</p>
+          <dl className="flex flex-col gap-2 text-[#3d4a38]">
+            {site.hours && (
+              <div>
+                <dt className="inline font-semibold">Horario: </dt>
+                <dd className="inline">{site.hours}</dd>
+              </div>
+            )}
+            {site.address && (
+              <div>
+                <dt className="inline font-semibold">Dirección: </dt>
+                <dd className="inline">{site.address}</dd>
+              </div>
+            )}
+            {site.phone && (
+              <div>
+                <dt className="inline font-semibold">Teléfono: </dt>
+                <dd className="inline">
+                  <a href={`tel:${site.phone}`} className="underline underline-offset-4">
+                    {site.phone}
+                  </a>
+                </dd>
+              </div>
+            )}
+            {site.paymentMethods && site.paymentMethods.length > 0 && (
+              <div>
+                <dt className="inline font-semibold">{site.copy?.payments ?? "Aceptamos"}: </dt>
+                <dd className="inline">{site.paymentMethods.join(", ")}</dd>
+              </div>
+            )}
+          </dl>
+          {wa && (
+            <a href={wa} target="_blank" rel="noopener" className="inline-flex min-h-12 items-center self-start rounded-full bg-[#1d7a45] px-6 font-semibold text-white">
+              {waLabel}
+            </a>
+          )}
         </div>
         {leadForm ?? (
           <div className="rounded-2xl border border-dashed border-[#b9c4ad] p-6 text-[#4a6b3e]">
