@@ -10,7 +10,7 @@ Plataforma para negocios pequeños: Nuna (IA) entrevista al dueño, publica su p
 - Página pública por negocio en `/sitio/<nombre>` con formulario de cotización que crea el lead en el CRM.
 - Panel con el CRM por etapas.
 
-Nuna usa Claude si existe `ANTHROPIC_API_KEY`; si no, entiende respuestas con reglas simples.
+Nuna puede usar DeepSeek o Claude (variable `NUNA_AI_PROVIDER`). Sin llave de IA, o si la IA falla, entiende respuestas con reglas simples.
 
 ## Correr localmente
 
@@ -22,4 +22,4 @@ npm run dev
 
 ## Stack
 
-Next.js 16 · Supabase (Postgres, Auth, Storage) · API de Claude · Vercel.
+Next.js 16 · Supabase (Postgres, Auth, Storage) · DeepSeek o Claude · Vercel.

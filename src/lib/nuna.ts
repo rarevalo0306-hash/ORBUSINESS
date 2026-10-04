@@ -10,12 +10,27 @@ import {
   type QuestionKey,
 } from "@/lib/interview";
 
-const MODEL = "claude-opus-5-5";
+// ---------- Proveedor de IA ----------
+// Se elige con NUNA_AI_PROVIDER = "deepseek" | "anthropic" | "rules".
+// Si no se define, usa el primero que tenga llave (DeepSeek, luego Claude); sin llaves, reglas.
 
-// Nuna usa Claude solo si hay llave; si no (o si algo falla), usa las reglas de lib/interview.ts.
-export function nunaUsesClaude() {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
+type Provider = "deepseek" | "anthropic" | "rules";
+
+export function nunaProvider(): Provider {
+  const chosen = process.env.NUNA_AI_PROVIDER;
+  if (chosen === "deepseek" && process.env.DEEPSEEK_API_KEY) return "deepseek";
+  if (chosen === "anthropic" && process.env.ANTHROPIC_API_KEY) return "anthropic";
+  if (chosen === "rules") return "rules";
+  if (process.env.DEEPSEEK_API_KEY) return "deepseek";
+  if (process.env.ANTHROPIC_API_KEY) return "anthropic";
+  return "rules";
 }
+
+export function nunaUsesAI() {
+  return nunaProvider() !== "rules";
+}
+
+// ---------- Lo que la IA debe devolver (igual para cualquier proveedor) ----------
 
 const AnswerSchema = z.object({
   understood: z.boolean().describe("true si la respuesta contesta la pregunta"),
@@ -30,6 +45,17 @@ const AnswerSchema = z.object({
     .nullable()
     .describe("Servicios con precio en dólares, solo para la pregunta de servicios"),
 });
+type Answer = z.infer<typeof AnswerSchema>;
+
+const SYSTEM =
+  "Eres Nuna, la asistente de Orbusiness. Entrevistas al dueño de un negocio pequeño para armarle su página web y su CRM. " +
+  "Tu trabajo aquí es entender UNA respuesta y extraer el dato pedido. Nunca inventes datos que el dueño no dijo. " +
+  "Si la respuesta no contesta la pregunta, marca understood=false y en reply pide el dato de forma amable.";
+
+function userPrompt(key: QuestionKey, answer: string) {
+  const q = QUESTIONS.find((x) => x.key === key)!;
+  return `Pregunta (${key}): ${q.text}\nQué hay que extraer: ${q.hint}\n\nRespuesta del dueño:\n${answer}`;
+}
 
 const TEXT_FIELD: Partial<Record<QuestionKey, keyof BusinessPatch>> = {
   name: "name",
@@ -45,40 +71,16 @@ const BOOL_FIELD: Partial<Record<QuestionKey, keyof BusinessPatch>> = {
   quote_requires_approval: "quote_requires_approval",
 };
 
-let client: Anthropic | null = null;
-function anthropic() {
-  client ??= new Anthropic();
-  return client;
-}
-
-async function extractWithClaude(key: QuestionKey, answer: string): Promise<Extraction> {
-  const q = QUESTIONS.find((x) => x.key === key)!;
-  const response = await anthropic().messages.parse({
-    model: MODEL,
-    max_tokens: 2000,
-    output_config: { effort: "low", format: zodOutputFormat(AnswerSchema) },
-    system:
-      "Eres Nuna, la asistente de Orbusiness. Entrevistas al dueño de un negocio pequeño para armarle su página web y su CRM. " +
-      "Tu trabajo aquí es entender UNA respuesta y extraer el dato pedido. Nunca inventes datos que el dueño no dijo. " +
-      "Si la respuesta no contesta la pregunta, marca understood=false y en reply pide el dato de forma amable.",
-    messages: [
-      {
-        role: "user",
-        content: `Pregunta (${key}): ${q.text}\nQué hay que extraer: ${q.hint}\n\nRespuesta del dueño:\n${answer}`,
-      },
-    ],
-  });
-
-  const out = response.parsed_output;
-  if (!out) throw new Error("Claude no devolvió una respuesta válida");
+// Convierte la respuesta de la IA en cambios para el negocio.
+function toExtraction(key: QuestionKey, out: Answer): Extraction {
   if (!out.understood) return { ok: false, ack: out.reply };
 
   const patch: BusinessPatch = {};
   const textField = TEXT_FIELD[key];
   const boolField = BOOL_FIELD[key];
   if (textField) {
-    if (!out.text_value) return { ok: false, ack: out.reply };
-    Object.assign(patch, { [textField]: out.text_value });
+    if (!out.text_value?.trim()) return { ok: false, ack: out.reply };
+    Object.assign(patch, { [textField]: out.text_value.trim() });
   }
   if (boolField) {
     if (out.bool_value === null) return { ok: false, ack: out.reply };
@@ -96,12 +98,74 @@ async function extractWithClaude(key: QuestionKey, answer: string): Promise<Extr
   return { ok: true, ack: out.reply, patch };
 }
 
+// ---------- DeepSeek (API compatible con el formato de chat de OpenAI) ----------
+
+// DEEPSEEK_BASE_URL permite usar DeepSeek desde otro proveedor compatible (por ejemplo, con servidores en EE.UU.).
+const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com";
+const JSON_EXAMPLE =
+  '{"understood": true, "reply": "Anotado.", "text_value": "Jardines Ricardo", "bool_value": null, "payment_timing": null, "services": null}';
+
+async function askDeepSeek(key: QuestionKey, answer: string): Promise<Answer> {
+  const response = await fetch(`${DEEPSEEK_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: process.env.DEEPSEEK_MODEL || "deepseek-flash",
+      max_tokens: 2000,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            `${SYSTEM}\n\nResponde solo con un objeto json con estas claves: ` +
+            "understood (boolean), reply (string), text_value (string o null), bool_value (boolean o null), " +
+            'payment_timing ("before", "deposit", "after" o null), services (lista de {"name", "price"} o null). ' +
+            `Ejemplo de json: ${JSON_EXAMPLE}`,
+        },
+        { role: "user", content: userPrompt(key, answer) },
+      ],
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) throw new Error(`DeepSeek respondió ${response.status}: ${await response.text()}`);
+
+  const data = (await response.json()) as { choices?: { message?: { content?: string | null } }[] };
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error("DeepSeek devolvió una respuesta vacía");
+  return AnswerSchema.parse(JSON.parse(content));
+}
+
+// ---------- Claude ----------
+
+let anthropicClient: Anthropic | null = null;
+
+async function askClaude(key: QuestionKey, answer: string): Promise<Answer> {
+  anthropicClient ??= new Anthropic();
+  const response = await anthropicClient.messages.parse({
+    model: process.env.ANTHROPIC_MODEL || "claude-opus-5-5",
+    max_tokens: 2000,
+    output_config: { effort: "low", format: zodOutputFormat(AnswerSchema) },
+    system: SYSTEM,
+    messages: [{ role: "user", content: userPrompt(key, answer) }],
+  });
+  if (!response.parsed_output) throw new Error("Claude no devolvió una respuesta válida");
+  return response.parsed_output;
+}
+
+// ---------- Punto de entrada ----------
+
 export async function extractAnswer(key: QuestionKey, answer: string): Promise<Extraction> {
-  if (!nunaUsesClaude()) return extractWithRules(key, answer);
+  const provider = nunaProvider();
+  if (provider === "rules") return extractWithRules(key, answer);
   try {
-    return await extractWithClaude(key, answer);
+    const out = provider === "deepseek" ? await askDeepSeek(key, answer) : await askClaude(key, answer);
+    return toExtraction(key, out);
   } catch (error) {
-    console.error("Nuna/Claude falló, uso reglas:", error);
+    // Si la IA falla, Nuna no se detiene: entiende la respuesta con reglas.
+    console.error(`Nuna (${provider}) falló, uso reglas:`, error);
     return extractWithRules(key, answer);
   }
 }

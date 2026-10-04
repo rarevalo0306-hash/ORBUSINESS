@@ -1,7 +1,7 @@
 import { ButtonLink, Card, PageTitle } from "@/components/ui";
 import { requireBusiness } from "@/lib/business";
 import { QUESTIONS, money } from "@/lib/interview";
-import { nunaUsesClaude } from "@/lib/nuna";
+import { nunaUsesAI } from "@/lib/nuna";
 import { InterviewChat } from "./chat";
 
 export default async function InterviewPage() {
@@ -38,7 +38,7 @@ export default async function InterviewPage() {
       <PageTitle
         title="Platícame de tu negocio"
         lead={
-          nunaUsesClaude()
+          nunaUsesAI()
             ? "Contesta con tus palabras. Nuna (con IA) entiende tus respuestas y arma todo con ellas."
             : "Contesta con tus palabras. Nuna está en modo básico (sin llave de IA todavía): entiende respuestas sencillas."
         }
