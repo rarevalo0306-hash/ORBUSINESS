@@ -41,9 +41,9 @@ const AnswerSchema = z.object({
   bool_value: z.boolean().nullable().describe("Valor sí/no para campos booleanos"),
   payment_timing: z.enum(["before", "deposit", "after"]).nullable(),
   services: z
-    .array(z.object({ name: z.string(), price: z.number() }))
+    .array(z.object({ name: z.string(), price: z.number().nullable() }))
     .nullable()
-    .describe("Servicios con precio en dólares, solo para la pregunta de servicios"),
+    .describe("Productos o servicios (precio en dólares o null si no lo dijo), solo para esa pregunta"),
 });
 type Answer = z.infer<typeof AnswerSchema>;
 
@@ -91,7 +91,9 @@ function toExtraction(key: QuestionKey, out: Answer): Extraction {
     patch.payment_timing = out.payment_timing;
   }
   if (key === "services") {
-    const services = (out.services ?? []).filter((s) => s.name.trim() && s.price >= 0);
+    const services = (out.services ?? [])
+      .filter((s) => s.name.trim() && (s.price === null || s.price >= 0))
+      .map((s) => ({ name: s.name.trim(), price: s.price }));
     if (!services.length) return { ok: false, ack: out.reply };
     return { ok: true, ack: out.reply, patch, services };
   }
@@ -122,7 +124,7 @@ async function askDeepSeek(key: QuestionKey, answer: string): Promise<Answer> {
           content:
             `${SYSTEM}\n\nResponde solo con un objeto json con estas claves: ` +
             "understood (boolean), reply (string), text_value (string o null), bool_value (boolean o null), " +
-            'payment_timing ("before", "deposit", "after" o null), services (lista de {"name", "price"} o null). ' +
+            'payment_timing ("before", "deposit", "after" o null), services (lista de {"name", "price"} donde price es número o null, o null). ' +
             `Ejemplo de json: ${JSON_EXAMPLE}`,
         },
         { role: "user", content: userPrompt(key, answer) },

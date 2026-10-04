@@ -11,7 +11,7 @@ export type SiteContent = {
   industry: string;
   zone: string;
   hours: string;
-  services: { name: string; price: number }[];
+  services: { name: string; price: number | null }[];
   logoUrl: string | null;
   photos: string[];
   ctaLabel: string;
@@ -63,7 +63,9 @@ export function buildSiteContent(
     industry,
     zone: b.zone ?? "",
     hours: b.hours ?? "",
-    services: services.filter((s) => s.active).map((s) => ({ name: s.name, price: Number(s.price) })),
+    services: services
+      .filter((s) => s.active)
+      .map((s) => ({ name: s.name, price: s.price === null ? null : Number(s.price) })),
     logoUrl,
     photos,
     ctaLabel: b.visit_before_quote ? "Agenda una visita gratis" : "Pide tu cotización",

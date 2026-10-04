@@ -4,7 +4,7 @@
 import type { Database } from "@/lib/database.types";
 
 export type BusinessPatch = Database["public"]["Tables"]["businesses"]["Update"];
-export type ServiceInput = { name: string; price: number };
+export type ServiceInput = { name: string; price: number | null };
 
 export type QuestionKey =
   | "name"
@@ -42,9 +42,9 @@ export const QUESTIONS: Question[] = [
   },
   {
     key: "services",
-    text: "¿Qué servicios das y cuánto cobras? Escríbelos como te salga, por ejemplo: corte de pasto 45, poda 80.",
+    text: "¿Qué vendes o qué servicios das? Si tienes precios, inclúyelos (por ejemplo: corte de pasto 45, poda 80). Si es una tienda, dime qué tipo de productos (por ejemplo: herramientas, pintura, plomería).",
     example: "Corte de pasto 45, poda de árboles 80, limpieza de jardín 60, instalación de riego 300",
-    hint: "Lista de servicios, cada uno con su precio en dólares.",
+    hint: "Lista de productos o servicios que ofrece el negocio. Precio en dólares solo si el dueño lo dijo; si no, null. Si describe una tienda en general, resume en categorías de productos.",
   },
   {
     key: "zone",
@@ -123,21 +123,27 @@ export function money(n: number) {
   return `$${Number(n).toFixed(2).replace(/\.00$/, "")}`;
 }
 
+export function priceLabel(price: number | null) {
+  return price === null ? "precio a consultar" : `desde ${money(price)}`;
+}
+
+// Lee "corte de pasto 45, poda 80" o "herramientas, pintura, plomería" (sin precios).
 export function parseServices(text: string): ServiceInput[] {
   return text
-    .split(/[,\n;]+/)
+    .split(/[,\n;]+|\s+y\s+/)
     .map((part) => {
-      const m = part.trim().match(/^(.*?)[\s:–-]*\$?\s*(\d+(?:\.\d+)?)\s*(dolares|dólares|usd|pesos)?\.?$/i);
-      if (!m) return null;
-      const name = m[1].trim().replace(/[\s:–-]+$/, "");
-      if (!name) return null;
-      return { name: cap(name), price: parseFloat(m[2]) };
+      const clean = part.trim().replace(/[.]+$/, "");
+      if (!clean) return null;
+      const m = clean.match(/^(.*?)[\s:–-]*\$?\s*(\d+(?:\.\d+)?)\s*(dolares|dólares|usd|pesos)?$/i);
+      const name = (m ? m[1] : clean).trim().replace(/[\s:–-]+$/, "");
+      if (!name || name.length > 80 || /^\d+$/.test(name)) return null;
+      return { name: cap(name), price: m ? parseFloat(m[2]) : null };
     })
     .filter((s): s is ServiceInput => s !== null);
 }
 
 export function servicesText(list: ServiceInput[]) {
-  return list.map((s) => `${s.name} ${money(s.price)}`).join(" · ");
+  return list.map((s) => (s.price === null ? s.name : `${s.name} ${money(s.price)}`)).join(" · ");
 }
 
 // ---------- lectura de respuestas por reglas ----------
@@ -155,8 +161,8 @@ export function extractWithRules(key: QuestionKey, raw: string): Extraction {
     case "services": {
       const list = parseServices(text);
       if (!list.length)
-        return { ok: false, ack: "No encontré precios. Escríbelos así: corte de pasto 45, poda 80." };
-      return { ok: true, ack: `Anoté ${list.length} servicios: ${servicesText(list)}.`, patch: {}, services: list };
+        return { ok: false, ack: "¿Qué vendes o qué servicios das? Escríbelos separados por comas, con precio si lo tienes." };
+      return { ok: true, ack: `Anoté: ${servicesText(list)}.`, patch: {}, services: list };
     }
     case "visit_before_quote": {
       const v = has(t, ["ver", "visita", "revis", "primero", "voy"]) && !has(t, ["directo"]);

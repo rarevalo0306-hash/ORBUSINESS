@@ -76,7 +76,7 @@ export type Database = {
           id: string;
           business_id: string;
           name: string;
-          price: number;
+          price: number | null;
           duration_minutes: number | null;
           active: boolean;
           sort: number;
@@ -85,7 +85,7 @@ export type Database = {
         {
           business_id: string;
           name: string;
-          price?: number;
+          price?: number | null;
           duration_minutes?: number | null;
           active?: boolean;
           sort?: number;

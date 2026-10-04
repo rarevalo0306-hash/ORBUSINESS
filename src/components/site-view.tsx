@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { money } from "@/lib/interview";
+import { priceLabel } from "@/lib/interview";
 import type { SiteContent } from "@/lib/site";
 
 // La página web de un negocio. Usa una paleta clara propia (no la de Orbusiness)
@@ -55,12 +55,12 @@ export function SiteView({ site, leadForm }: { site: SiteContent; leadForm?: Rea
 
       {site.services.length > 0 && (
         <section className="mx-auto max-w-5xl px-5 py-10">
-          <h2 className="mb-5 font-display text-3xl font-bold">Servicios</h2>
+          <h2 className="mb-5 font-display text-3xl font-bold">Lo que ofrecemos</h2>
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {site.services.map((s) => (
               <li key={s.name} className="flex flex-col gap-1 rounded-2xl border border-[#d6dccd] bg-white p-5">
                 <span className="text-lg font-semibold">{s.name}</span>
-                <span className="text-[#4a6b3e]">desde {money(s.price)}</span>
+                <span className="text-[#4a6b3e]">{priceLabel(s.price)}</span>
               </li>
             ))}
           </ul>

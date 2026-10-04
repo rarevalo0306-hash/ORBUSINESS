@@ -1,6 +1,6 @@
 import { ButtonLink, Card, PageTitle } from "@/components/ui";
 import { requireBusiness } from "@/lib/business";
-import { QUESTIONS, money } from "@/lib/interview";
+import { QUESTIONS, servicesText } from "@/lib/interview";
 import { nunaUsesAI } from "@/lib/nuna";
 import { InterviewChat } from "./chat";
 
@@ -23,7 +23,7 @@ export default async function InterviewPage() {
     ["Negocio", business.name === "Mi negocio" ? null : business.name],
     ["Dueño", business.owner_name],
     ["A qué se dedica", business.industry],
-    ["Servicios", services?.length ? services.map((s) => `${s.name} ${money(s.price)}`).join(" · ") : null],
+    ["Productos o servicios", services?.length ? servicesText(services) : null],
     ["Zona", business.zone],
     ["Horario", business.hours],
     ["Cómo llegan los clientes", business.lead_sources],
