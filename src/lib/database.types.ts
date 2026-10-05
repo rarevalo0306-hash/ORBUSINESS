@@ -132,6 +132,7 @@ export type Database = {
           custom_domain: string | null;
           content: Json;
           status: string;
+          template: string;
           published_at: string | null;
           updated_at: string;
         },
@@ -143,6 +144,7 @@ export type Database = {
           custom_domain?: string | null;
           content?: Json;
           status?: string;
+          template?: string;
           published_at?: string | null;
         }
       >;

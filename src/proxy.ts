@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/database.types";
 
-const PRIVATE_PREFIXES = ["/onboarding", "/panel", "/manual-de-marca"];
+const PRIVATE_PREFIXES = ["/onboarding", "/panel", "/manual-de-marca", "/vista-previa"];
 
 // Refresca la sesión de Supabase en cada visita y manda al login
 // a quien intente entrar a una parte privada sin sesión.

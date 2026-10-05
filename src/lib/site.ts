@@ -36,6 +36,7 @@ export type SiteContent = {
   ctaLabel: string; // se mantiene por las páginas publicadas antes
   copy?: SiteCopy;
   brand?: BrandKit | null; // kit de marca comprado: colores, letras y logo de la página
+  template?: string; // plantilla de diseño (lib/site-templates.ts)
 };
 
 type Phrase = { tu: string; usted: string; vos: string };
@@ -73,6 +74,7 @@ export function buildSiteContent(
   logoUrl: string | null,
   photos: string[],
   brand: BrandKit | null = null,
+  template = "clasica",
 ): SiteContent {
   const market = marketFor(b.country_code);
   const form = b.address_form ?? market?.addressForm ?? "tu";
@@ -133,6 +135,7 @@ export function buildSiteContent(
     photos,
     ctaLabel: cta,
     brand,
+    template,
     copy: {
       cta,
       leadIntro: t({

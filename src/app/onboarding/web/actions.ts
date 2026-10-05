@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { siteContentFor } from "@/lib/brand-store";
+import { refreshPublishedSite, siteContentFor } from "@/lib/brand-store";
+import { SITE_TEMPLATES } from "@/lib/site-templates";
 import { requireBusiness } from "@/lib/business";
 import { slugify } from "@/lib/site";
 
@@ -44,4 +45,14 @@ export async function publishWebsite() {
   revalidatePath("/onboarding", "layout");
   revalidatePath(`/sitio/${subdomain}`);
   redirect("/onboarding/web?publicada=1");
+}
+
+// El dueño elige el diseño de su página. Si ya está publicada, se actualiza al momento.
+export async function chooseTemplate(template: string) {
+  const { supabase, business } = await requireBusiness();
+  if (!SITE_TEMPLATES.some((t) => t.id === template)) throw new Error("Diseño no válido");
+  const { error } = await supabase.from("websites").upsert({ business_id: business.id, template });
+  if (error) throw new Error(error.message);
+  await refreshPublishedSite(supabase, business);
+  revalidatePath("/onboarding/web");
 }

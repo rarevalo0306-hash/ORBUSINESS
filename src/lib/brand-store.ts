@@ -53,14 +53,15 @@ export async function saveKit(supabase: Supabase, b: Business, kit: BrandKit, pa
 
 // Contenido de la página web con lo que hay hoy (servicios, fotos, logo y, si se compró, la marca).
 export async function siteContentFor(supabase: Supabase, b: Business) {
-  const [{ data: services }, { data: assets }] = await Promise.all([
+  const [{ data: services }, { data: assets }, { data: website }] = await Promise.all([
     supabase.from("services").select("*").eq("business_id", b.id).order("sort"),
     supabase.from("brand_assets").select("kind, storage_path").eq("business_id", b.id).order("created_at"),
+    supabase.from("websites").select("template").eq("business_id", b.id).maybeSingle(),
   ]);
   const logo = assets?.find((a) => a.kind === "logo");
   const photos = (assets ?? []).filter((a) => a.kind === "photo").map((a) => publicAssetUrl(a.storage_path));
   const brand = b.brand_status === "purchased" ? storedKit(b.brand_kit, b) : null;
-  return buildSiteContent(b, services ?? [], logo ? publicAssetUrl(logo.storage_path) : null, photos, brand);
+  return buildSiteContent(b, services ?? [], logo ? publicAssetUrl(logo.storage_path) : null, photos, brand, website?.template ?? "clasica");
 }
 
 // Si la página ya está publicada, le aplica los cambios al momento.

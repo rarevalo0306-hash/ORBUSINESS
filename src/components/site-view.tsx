@@ -1,223 +1,664 @@
 import type { CSSProperties, ReactNode } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 import { Fit } from "@/components/fit";
-import { backdropCss, contrast, fontsById, googleFontsHref, kitPalette, onColor, sanitizeKit, type BrandKit } from "@/lib/brand";
+import {
+  backdropCss,
+  contrast,
+  fontsById,
+  googleFontsHref,
+  kitPalette,
+  mixHex,
+  onColor,
+  palettesFor,
+  sanitizeKit,
+  type BrandKit,
+  type Palette,
+} from "@/lib/brand";
 import { currencyName, priceLabel } from "@/lib/interview";
 import type { SiteContent } from "@/lib/site";
+import { templateById, type SiteTemplate } from "@/lib/site-templates";
 
-// La página web de un negocio. Usa la paleta del negocio (no la de Orbusiness): la de su kit de
-// marca si lo compró, o una paleta clara neutra si no.
-const BASE_THEME = {
-  "--s-bg": "#f4f1ea",
-  "--s-ink": "#1f2a1c",
-  "--s-body": "#3d4a38",
-  "--s-primary": "#1f2a1c",
-  "--s-on-primary": "#f4f1ea",
-  "--s-eyebrow": "#4a6b3e",
-  "--s-line": "#d6dccd",
-  "--s-soft": "#dfe6d6",
-  "--s-footer": "#5d6b56",
-  "--s-heading": "var(--font-display)",
-  "--s-text": "var(--font-sans)",
-  "--s-hero": "#dfe6d6",
+// La página web de un negocio, con la plantilla que eligió el dueño. Usa los colores, letras y logo
+// de su kit de marca (o una paleta moderna según su giro si no tiene kit). Todo es adaptable:
+// se diseña primero para celular y crece para tablet y computadora.
+
+// ---------- Tema (variables CSS) ----------
+
+function siteTheme(p: Palette, heading: string, body: string, tpl: SiteTemplate, kit: BrandKit | null) {
+  const safe = (fg: string, bg: string, fallback: string, min = 4.5) => (contrast(fg, bg) >= min ? fg : fallback);
+  const corners = { rectas: ["4px", "6px", "6px"], suaves: ["14px", "26px", "999px"], redondas: ["22px", "38px", "999px"] }[tpl.corners];
+  let t: Record<string, string>;
+  if (tpl.mode === "oscuro") {
+    const btn = safe(p.accent, p.dark, p.light);
+    t = {
+      "--bg": p.dark,
+      "--surface": mixHex(p.dark, "#FFFFFF", 0.07),
+      "--ink": p.light,
+      "--muted": mixHex(p.light, p.dark, 0.35),
+      "--line": mixHex(p.dark, p.light, 0.16),
+      "--btn": btn,
+      "--on-btn": onColor(btn, p.dark),
+      "--eyebrow": safe(p.accent, p.dark, p.light),
+      "--band": mixHex(p.dark, "#FFFFFF", 0.05),
+      "--on-band": p.light,
+    };
+  } else if (tpl.mode === "contraste") {
+    const ink = onColor(p.primary, p.dark);
+    const btn = ink === "#FFFFFF" ? p.light : p.dark;
+    t = {
+      "--bg": p.primary,
+      "--surface": mixHex(p.primary, ink, 0.1),
+      "--ink": ink,
+      "--muted": mixHex(ink, p.primary, 0.25),
+      "--line": mixHex(p.primary, ink, 0.25),
+      "--btn": btn,
+      "--on-btn": safe(p.primary, btn, p.dark),
+      "--eyebrow": safe(p.accent, p.primary, ink, 3),
+      "--band": p.dark,
+      "--on-band": p.light,
+    };
+  } else {
+    const bg = tpl.mode === "tinte" ? mixHex(p.light, p.secondary, 0.3) : p.light;
+    t = {
+      "--bg": bg,
+      "--surface": tpl.mode === "tinte" ? p.light : "#FFFFFF",
+      "--ink": p.dark,
+      "--muted": mixHex(p.dark, bg, 0.38),
+      "--line": mixHex(bg, p.dark, 0.12),
+      "--btn": p.primary,
+      "--on-btn": onColor(p.primary, p.dark),
+      "--eyebrow": safe(p.primary, bg, p.dark),
+      "--band": p.dark,
+      "--on-band": p.light,
+    };
+  }
+  const brandLike = { pattern: kit?.pattern ?? "aurora", palette: p.id, colors: kit?.colors ?? (p.id === "custom" ? p : null) } as Pick<BrandKit, "pattern" | "palette" | "colors">;
+  return {
+    ...t,
+    "--hero": backdropCss(brandLike, "oscuro"),
+    "--hero-soft": backdropCss(brandLike, "claro"),
+    "--on-hero": onColor(p.primary, p.dark),
+    "--r": corners[0],
+    "--rl": corners[1],
+    "--rb": corners[2],
+    "--heading": `"${heading}", system-ui, sans-serif`,
+    "--text": `"${body}", system-ui, sans-serif`,
+  } as CSSProperties;
+}
+
+// ---------- Piezas ----------
+
+const shell = "mx-auto w-full max-w-6xl px-5 sm:px-8";
+const eyebrow = "text-xs font-semibold uppercase tracking-[0.18em] text-[var(--eyebrow)]";
+const btn = "inline-flex min-h-12 items-center justify-center gap-2 rounded-[var(--rb)] px-6 font-semibold transition hover:opacity-90";
+const btnPrimary = `${btn} bg-[var(--btn)] text-[var(--on-btn)]`;
+const btnGhost = `${btn} border border-[var(--line)] text-[var(--ink)]`;
+const btnWa = `${btn} bg-[#1F8A4C] text-white`;
+const card = "rounded-[var(--rl)] bg-[var(--surface)]";
+
+function WaIcon({ className = "size-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+    </svg>
+  );
+}
+
+function Arrow({ className = "size-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+type Ctx = {
+  site: SiteContent;
+  tpl: SiteTemplate;
+  kit: BrandKit | null;
+  cta: string;
+  wa: string | null;
+  waLabel: string;
+  waFirst: boolean;
+  initials: string;
+  photo: string | null;
+  h1: string;
+  h2: string;
 };
 
-function brandTheme(kit: BrandKit) {
-  const p = kitPalette(kit);
-  const f = fontsById(kit.fonts);
-  return {
-    "--s-bg": p.light,
-    "--s-ink": p.dark,
-    "--s-body": `color-mix(in srgb, ${p.dark} 82%, ${p.light})`,
-    "--s-primary": p.primary,
-    "--s-on-primary": onColor(p.primary, p.dark),
-    "--s-eyebrow": contrast(p.primary, p.light) >= 4.5 ? p.primary : p.dark,
-    "--s-line": `color-mix(in srgb, ${p.primary} 20%, ${p.light})`,
-    "--s-soft": `color-mix(in srgb, ${p.primary} 12%, ${p.light})`,
-    "--s-footer": `color-mix(in srgb, ${p.dark} 70%, ${p.light})`,
-    "--s-heading": `"${f.heading.family}", system-ui, sans-serif`,
-    "--s-text": `"${f.body.family}", system-ui, sans-serif`,
-    "--s-hero": backdropCss(kit, "oscuro"),
-  };
+function Logo({ c, onDark = false, size = 40 }: { c: Ctx; onDark?: boolean; size?: number }) {
+  const { site, kit } = c;
+  if (site.logoUrl) {
+    return (
+      <span className="flex min-w-0 items-center gap-3">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={site.logoUrl} alt={`Logo de ${site.name}`} className="size-11 rounded-[var(--r)] object-contain" />
+        <span className="truncate text-lg font-bold [font-family:var(--heading)]">{site.name}</span>
+      </span>
+    );
+  }
+  if (kit) {
+    return (
+      <Fit align="start" className="max-w-xs sm:max-w-md">
+        <BrandLogo kit={kit} name={site.name} size={size} compact theme={onDark ? "blanco" : "color"} />
+      </Fit>
+    );
+  }
+  return (
+    <span className="flex min-w-0 items-center gap-3">
+      <span className="flex size-11 shrink-0 items-center justify-center rounded-[var(--r)] bg-[var(--btn)] font-bold text-[var(--on-btn)] [font-family:var(--heading)]">{c.initials}</span>
+      <span className="truncate text-lg font-bold tracking-tight [font-family:var(--heading)]">{site.name}</span>
+    </span>
+  );
 }
+
+function Ctas({ c, center = false, light = false }: { c: Ctx; center?: boolean; light?: boolean }) {
+  return (
+    <div className={`flex flex-wrap gap-3 ${center ? "justify-center" : ""}`}>
+      {c.waFirst && c.wa && (
+        <a href={c.wa} target="_blank" rel="noopener" className={btnWa}>
+          <WaIcon /> {c.waLabel}
+        </a>
+      )}
+      <a href="#contacto" className={c.waFirst ? (light ? `${btn} border border-white/40 text-white` : btnGhost) : btnPrimary}>
+        {c.cta} <Arrow />
+      </a>
+    </div>
+  );
+}
+
+function infoItems(site: SiteContent) {
+  return [
+    site.hours && { label: "Horario", value: site.hours },
+    (site.address || site.zone) && { label: "Dónde estamos", value: site.address || site.zone },
+    site.paymentMethods?.length && { label: site.copy?.payments ?? "Aceptamos", value: site.paymentMethods.join(", ") },
+  ].filter(Boolean) as { label: string; value: string }[];
+}
+
+// Imagen principal: la foto del negocio o un panel con el fondo y el símbolo de la marca.
+function Visual({ c, className = "" }: { c: Ctx; className?: string }) {
+  if (c.photo) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={c.photo} alt={`${c.site.name}`} className={`h-full w-full object-cover ${className}`} />;
+  }
+  return (
+    <div className={`flex h-full w-full flex-col items-center justify-center gap-5 p-8 text-center text-[var(--on-hero)] ${className}`} style={{ background: "var(--hero)" }}>
+      {c.kit ? <BrandLogo kit={c.kit} name={c.site.name} variant="isotipo" theme="blanco" size={96} /> : <span className="text-6xl font-bold [font-family:var(--heading)]">{c.initials}</span>}
+      <span className="max-w-sm text-2xl font-semibold leading-tight tracking-tight [font-family:var(--heading)]">{c.kit?.slogan ?? c.site.tagline}</span>
+    </div>
+  );
+}
+
+// ---------- Portadas ----------
+
+function Hero({ c }: { c: Ctx }) {
+  const { site, tpl } = c;
+  const label = `${site.industry}${site.zone ? ` · ${site.zone}` : ""}`;
+  switch (tpl.hero) {
+    case "centrado":
+      return (
+        <section className="relative overflow-hidden">
+          <div className={`${shell} flex flex-col items-center gap-7 py-20 text-center sm:py-28`}>
+            <p className={eyebrow}>{label}</p>
+            <h1 className={`${c.h1} max-w-4xl`}>{site.tagline}</h1>
+            <p className="max-w-2xl text-lg text-[var(--muted)]">{site.intro}</p>
+            <Ctas c={c} center />
+            {infoItems(site).length > 0 && (
+              <ul className="mt-4 flex flex-wrap justify-center gap-2">
+                {infoItems(site).map((i) => (
+                  <li key={i.label} className="rounded-[var(--rb)] border border-[var(--line)] px-4 py-2 text-sm text-[var(--muted)]">
+                    <span className="font-semibold text-[var(--ink)]">{i.label}:</span> {i.value}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      );
+    case "imagen":
+      return (
+        <section className={`${shell} pt-2`}>
+          <div className="relative min-h-[560px] sm:min-h-[640px] overflow-hidden rounded-[var(--rl)]">
+            <Visual c={c} className="absolute inset-0" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/50 to-black/15" />
+            <div className="relative flex min-h-[560px] sm:min-h-[640px] flex-col justify-end gap-5 p-6 text-white sm:p-12">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/80">{label}</p>
+              <h1 className={`${c.h1} max-w-3xl`}>{site.tagline}</h1>
+              <p className="max-w-xl text-lg text-white/85">{site.intro}</p>
+              <Ctas c={c} light />
+            </div>
+          </div>
+        </section>
+      );
+    case "editorial":
+      return (
+        <section className={`${shell} flex flex-col gap-10 py-14 sm:py-20`}>
+          <p className={eyebrow}>{label}</p>
+          <h1 className={c.h1}>{site.tagline}</h1>
+          <div className="grid gap-6 border-t border-[var(--line)] pt-8 md:grid-cols-[1.4fr_1fr] md:items-end">
+            <p className="max-w-xl text-lg text-[var(--muted)]">{site.intro}</p>
+            <div className="md:justify-self-end">
+              <Ctas c={c} />
+            </div>
+          </div>
+          <div className="aspect-[4/3] overflow-hidden rounded-[var(--rl)] sm:aspect-[21/9]">
+            <Visual c={c} />
+          </div>
+        </section>
+      );
+    case "tarjeta":
+      return (
+        <section className="relative overflow-hidden px-5 py-16 sm:px-8 sm:py-24" style={{ background: "var(--hero)" }}>
+          <div className={`${card} relative mx-auto flex max-w-2xl flex-col gap-6 p-7 shadow-2xl sm:p-12`}>
+            <p className={eyebrow}>{label}</p>
+            <h1 className={c.h2.replace("text-3xl", "text-4xl")}>{site.tagline}</h1>
+            <p className="text-lg text-[var(--muted)]">{site.intro}</p>
+            <Ctas c={c} />
+            {infoItems(site).length > 0 && (
+              <dl className="grid gap-3 border-t border-[var(--line)] pt-6 sm:grid-cols-2">
+                {infoItems(site).map((i) => (
+                  <div key={i.label}>
+                    <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">{i.label}</dt>
+                    <dd className="mt-1">{i.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+        </section>
+      );
+    case "bento":
+      return (
+        <section className={`${shell} grid gap-3 py-8 sm:py-12 md:grid-cols-4 md:grid-rows-[auto_auto]`}>
+          <div className={`${card} flex flex-col justify-between gap-8 p-7 sm:p-10 md:col-span-2 md:row-span-2`}>
+            <p className={eyebrow}>{label}</p>
+            <div className="flex flex-col gap-5">
+              <h1 className={c.h2.replace("text-3xl", "text-4xl")}>{site.tagline}</h1>
+              <p className="text-[var(--muted)]">{site.intro}</p>
+              <Ctas c={c} />
+            </div>
+          </div>
+          <div className="min-h-64 overflow-hidden rounded-[var(--rl)] md:col-span-2">
+            <Visual c={c} />
+          </div>
+          <div className={`${card} flex flex-col gap-2 p-6`}>
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Horario</span>
+            <span className="text-lg font-semibold">{site.hours || "Escríbenos para saber"}</span>
+          </div>
+          {c.wa ? (
+            <a href={c.wa} target="_blank" rel="noopener" className="flex flex-col justify-between gap-6 rounded-[var(--rl)] bg-[#1F8A4C] p-6 text-white">
+              <WaIcon className="size-7" />
+              <span className="text-lg font-semibold">{c.waLabel}</span>
+            </a>
+          ) : (
+            <a href="#contacto" className="flex flex-col justify-between gap-6 rounded-[var(--rl)] bg-[var(--btn)] p-6 text-[var(--on-btn)]">
+              <Arrow className="size-7" />
+              <span className="text-lg font-semibold">{c.cta}</span>
+            </a>
+          )}
+        </section>
+      );
+    default:
+      return (
+        <section className={`${shell} grid items-center gap-10 py-14 md:grid-cols-2 md:py-20`}>
+          <div className="flex flex-col gap-6">
+            <p className={eyebrow}>{label}</p>
+            <h1 className={c.h1}>{site.tagline}</h1>
+            <p className="text-lg text-[var(--muted)]">{site.intro}</p>
+            <Ctas c={c} />
+          </div>
+          <div className="aspect-[4/3] overflow-hidden rounded-[var(--rl)] md:aspect-square">
+            <Visual c={c} />
+          </div>
+        </section>
+      );
+  }
+}
+
+// ---------- Lo que ofrecemos ----------
+
+function Services({ c }: { c: Ctx }) {
+  const { site, tpl } = c;
+  if (!site.services.length) return null;
+  const price = (p: number | null) => priceLabel(p, site.currency);
+  const note = site.secondaryCurrency ? (
+    <p className="text-[var(--muted)]">
+      Precios en {currencyName(site.currency)}; también aceptamos {currencyName(site.secondaryCurrency)}.
+    </p>
+  ) : null;
+  const header = (
+    <div className="flex flex-col gap-3">
+      <p className={eyebrow}>Lo que ofrecemos</p>
+      <h2 className={c.h2}>{site.services.some((x) => x.price != null) ? "Productos y precios" : "Lo que hacemos"}</h2>
+      {note}
+    </div>
+  );
+  let body: ReactNode;
+  if (tpl.services === "menu") {
+    body = (
+      <ul className="grid gap-x-12 md:grid-cols-2">
+        {site.services.map((s) => (
+          <li key={s.name} className="flex items-baseline gap-3 border-b border-[var(--line)] py-4">
+            <span className="text-lg font-semibold">{s.name}</span>
+            <span aria-hidden className="flex-1 border-b border-dotted border-[var(--line)]" />
+            <span className="shrink-0 font-semibold text-[var(--eyebrow)]">{price(s.price)}</span>
+          </li>
+        ))}
+      </ul>
+    );
+  } else if (tpl.services === "numerado") {
+    body = (
+      <ol className="flex flex-col">
+        {site.services.map((s, i) => (
+          <li key={s.name} className="grid grid-cols-[auto_1fr] items-baseline gap-x-6 gap-y-1 border-t border-[var(--line)] py-6 sm:grid-cols-[4rem_1fr_auto]">
+            <span className="text-sm font-semibold text-[var(--eyebrow)]">{String(i + 1).padStart(2, "0")}</span>
+            <span className="text-2xl font-semibold tracking-tight [font-family:var(--heading)] sm:text-3xl">{s.name}</span>
+            <span className="col-start-2 text-[var(--muted)] sm:col-start-3">{price(s.price)}</span>
+          </li>
+        ))}
+      </ol>
+    );
+  } else if (tpl.services === "destacados") {
+    const [top, rest] = [site.services.slice(0, 3), site.services.slice(3)];
+    body = (
+      <div className="flex flex-col gap-6">
+        <ul className="grid gap-3 md:grid-cols-3">
+          {top.map((s, i) => (
+            <li key={s.name} className={`flex min-h-48 flex-col justify-between gap-6 rounded-[var(--rl)] p-6 ${i === 0 ? "bg-[var(--btn)] text-[var(--on-btn)]" : "bg-[var(--surface)]"}`}>
+              <span className="text-2xl font-semibold tracking-tight [font-family:var(--heading)]">{s.name}</span>
+              <span className="flex items-center justify-between gap-3 font-semibold">
+                {price(s.price)} <Arrow />
+              </span>
+            </li>
+          ))}
+        </ul>
+        {rest.length > 0 && (
+          <ul className="flex flex-wrap gap-2">
+            {rest.map((s) => (
+              <li key={s.name} className="rounded-[var(--rb)] border border-[var(--line)] px-4 py-2">
+                {s.name} <span className="text-[var(--muted)]">· {price(s.price)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  } else {
+    body = (
+      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {site.services.map((s) => (
+          <li key={s.name} className={`${card} flex flex-col justify-between gap-6 p-6`}>
+            <span className="text-xl font-semibold tracking-tight [font-family:var(--heading)]">{s.name}</span>
+            <span className="flex items-center justify-between text-[var(--eyebrow)]">
+              <span className="font-semibold">{price(s.price)}</span>
+              <Arrow />
+            </span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  return (
+    <section id="servicios" className={`${shell} flex scroll-mt-6 flex-col gap-10 py-16 sm:py-24`}>
+      {header}
+      {body}
+    </section>
+  );
+}
+
+// ---------- Quiénes somos ----------
+
+function About({ c }: { c: Ctx }) {
+  const base = c.kit?.base;
+  if (c.tpl.about === "ninguno" || !base?.story) return null;
+  if (c.tpl.about === "valores") {
+    return (
+      <section id="nosotros" className="scroll-mt-6 bg-[var(--band)] py-16 text-[var(--on-band)] sm:py-24">
+        <div className={`${shell} flex flex-col gap-12`}>
+          <h2 className={`${c.h2} max-w-3xl`}>“{base.promise || c.kit!.slogan}”</h2>
+          <ul className="grid gap-8 md:grid-cols-3">
+            {base.values.slice(0, 3).map((v, i) => (
+              <li key={v.name} className="flex flex-col gap-3 border-t border-current/20 pt-6">
+                <span className="text-sm font-semibold opacity-60">{String(i + 1).padStart(2, "0")}</span>
+                <span className="text-xl font-semibold [font-family:var(--heading)]">{v.name}</span>
+                <span className="opacity-75">{v.text}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section id="nosotros" className={`${shell} grid scroll-mt-6 gap-10 py-16 sm:py-24 md:grid-cols-2`}>
+      <div className="flex flex-col gap-4">
+        <p className={eyebrow}>Quiénes somos</p>
+        <h2 className={c.h2}>{c.kit!.slogan}</h2>
+      </div>
+      <div className="flex flex-col gap-6">
+        <p className="text-lg leading-relaxed text-[var(--muted)]">{base.story}</p>
+        <ul className="flex flex-wrap gap-2">
+          {base.values.map((v) => (
+            <li key={v.name} className="rounded-[var(--rb)] bg-[var(--surface)] px-4 py-2 font-semibold">
+              {v.name}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+// ---------- Galería ----------
+
+function Gallery({ c }: { c: Ctx }) {
+  const photos = c.site.photos.filter((p) => p !== c.photo);
+  if (!photos.length) return null;
+  const alt = `Trabajo de ${c.site.name}`;
+  let body: ReactNode;
+  if (c.tpl.gallery === "tira") {
+    body = (
+      <div className="-mx-5 flex snap-x gap-3 overflow-x-auto px-5 pb-2 sm:-mx-8 sm:px-8">
+        {photos.map((url) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img key={url} src={url} alt={alt} className="aspect-[3/4] w-64 shrink-0 snap-start rounded-[var(--rl)] object-cover sm:w-80" />
+        ))}
+      </div>
+    );
+  } else if (c.tpl.gallery === "mosaico") {
+    body = (
+      <div className="columns-2 gap-3 md:columns-3">
+        {photos.map((url) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img key={url} src={url} alt={alt} className="mb-3 w-full break-inside-avoid rounded-[var(--rl)]" />
+        ))}
+      </div>
+    );
+  } else {
+    body = (
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+        {photos.map((url) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img key={url} src={url} alt={alt} className="aspect-square w-full rounded-[var(--rl)] object-cover" />
+        ))}
+      </div>
+    );
+  }
+  return (
+    <section className={`${shell} flex flex-col gap-8 py-16 sm:py-24`}>
+      <h2 className={c.h2}>Nuestros trabajos</h2>
+      {body}
+    </section>
+  );
+}
+
+// ---------- Contacto ----------
+
+function FormPreview({ cta }: { cta: string }) {
+  const field = "min-h-12 rounded-[var(--r)] border border-[var(--line)] bg-[var(--surface)]";
+  return (
+    <div aria-hidden className="flex flex-col gap-3">
+      <span className={field} />
+      <span className={field} />
+      <span className={`${field} min-h-24`} />
+      <span className={`${btnPrimary} w-full`}>{cta}</span>
+    </div>
+  );
+}
+
+function Contact({ c, leadForm }: { c: Ctx; leadForm?: ReactNode }) {
+  const { site, tpl } = c;
+  const form = leadForm ?? <FormPreview cta={c.cta} />;
+  const info = (
+    <dl className="flex flex-col gap-4">
+      {[...infoItems(site), ...(site.phone ? [{ label: "Teléfono", value: site.phone }] : [])].map((i) => (
+        <div key={i.label} className="flex flex-col gap-1">
+          <dt className="text-xs font-semibold uppercase tracking-[0.14em] opacity-60">{i.label}</dt>
+          <dd>{i.label === "Teléfono" ? <a href={`tel:${i.value}`} className="underline underline-offset-4">{i.value}</a> : i.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+  const waBtn = c.wa && (
+    <a href={c.wa} target="_blank" rel="noopener" className={`${btnWa} self-start`}>
+      <WaIcon /> {c.waLabel}
+    </a>
+  );
+  const lead = <p className="text-lg opacity-80">{site.copy?.leadIntro ?? "Déjanos tus datos y te contestamos hoy mismo."}</p>;
+
+  if (tpl.contact === "banda") {
+    return (
+      <section id="contacto" className="scroll-mt-6 bg-[var(--band)] py-16 text-[var(--on-band)] sm:py-24">
+        <div className={`${shell} grid gap-10 md:grid-cols-2`}>
+          <div className="flex flex-col gap-6">
+            <h2 className={c.h2}>{c.cta}</h2>
+            {lead}
+            {waBtn}
+            {info}
+          </div>
+          <div className="rounded-[var(--rl)] bg-[var(--bg)] p-6 text-[var(--ink)] sm:p-8">{form}</div>
+        </div>
+      </section>
+    );
+  }
+  if (tpl.contact === "tarjeta") {
+    return (
+      <section id="contacto" className={`${shell} scroll-mt-6 py-16 sm:py-24`}>
+        <div className={`${card} mx-auto flex max-w-3xl flex-col gap-8 p-7 sm:p-12`}>
+          <div className="flex flex-col gap-4 text-center">
+            <h2 className={c.h2}>{c.cta}</h2>
+            {lead}
+          </div>
+          {form}
+          <div className="flex flex-col items-start gap-6 border-t border-[var(--line)] pt-8 sm:flex-row sm:justify-between">
+            {info}
+            {waBtn}
+          </div>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section id="contacto" className={`${shell} grid scroll-mt-6 gap-10 py-16 sm:py-24 md:grid-cols-2`}>
+      <div className="flex flex-col gap-6">
+        <p className={eyebrow}>Contacto</p>
+        <h2 className={c.h2}>{c.cta}</h2>
+        {lead}
+        {waBtn}
+        {info}
+      </div>
+      <div className={`${card} p-6 sm:p-8`}>{form}</div>
+    </section>
+  );
+}
+
+// ---------- Página ----------
 
 function whatsappLink(phone: string, name: string) {
   const text = encodeURIComponent(`Hola ${name}, quisiera información.`);
   return `https://wa.me/${phone.replace(/\D/g, "")}?text=${text}`;
 }
 
-export function SiteView({ site, leadForm }: { site: SiteContent; leadForm?: ReactNode }) {
-  const cta = site.copy?.cta ?? site.ctaLabel;
-  const wa = site.phone ? whatsappLink(site.phone, site.name) : null;
-  const waLabel = site.copy?.whatsapp ?? "Escríbenos por WhatsApp";
-  const waFirst = Boolean(wa && site.whatsappFirst !== false);
+export function SiteView({
+  site,
+  leadForm,
+  template,
+  preview = false,
+}: {
+  site: SiteContent;
+  leadForm?: ReactNode;
+  template?: string; // para ver otra plantilla sin cambiar la guardada
+  preview?: boolean; // dentro de la app: sin botones flotantes
+}) {
+  const tpl = templateById(template ?? site.template);
   const kit = site.brand ? sanitizeKit(site.brand, site.brand) : null;
-  const theme = (kit ? brandTheme(kit) : BASE_THEME) as CSSProperties;
-  const initials = site.name
-    .split(/\s+/)
-    .map((w) => w.charAt(0))
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  const palette = kit ? kitPalette(kit) : palettesFor(site.industry)[0];
+  const fonts = fontsById(kit?.fonts ?? "jakarta");
+  const wa = site.phone ? whatsappLink(site.phone, site.name) : null;
+  const c: Ctx = {
+    site,
+    tpl,
+    kit,
+    cta: site.copy?.cta ?? site.ctaLabel,
+    wa,
+    waLabel: site.copy?.whatsapp ?? "Escríbenos por WhatsApp",
+    waFirst: Boolean(wa && site.whatsappFirst !== false),
+    initials: site.name
+      .split(/\s+/)
+      .map((w) => w.charAt(0))
+      .join("")
+      .slice(0, 2)
+      .toUpperCase(),
+    photo: site.photos[0] ?? null,
+    h1: `font-semibold leading-[0.98] tracking-[-0.035em] [font-family:var(--heading)] ${tpl.big ? "text-5xl sm:text-7xl lg:text-8xl" : "text-4xl sm:text-5xl lg:text-6xl"}`,
+    h2: `font-semibold leading-tight tracking-[-0.025em] [font-family:var(--heading)] ${tpl.big ? "text-3xl sm:text-5xl" : "text-3xl sm:text-4xl"}`,
+  };
+  const dark = tpl.mode === "oscuro" || tpl.mode === "contraste";
 
   return (
-    <div style={{ ...theme, fontFamily: "var(--s-text)" }} className="bg-[var(--s-bg)] text-[var(--s-ink)] [&_h1]:[font-family:var(--s-heading)] [&_h2]:[font-family:var(--s-heading)] [&_h1]:tracking-[-0.025em] [&_h2]:tracking-[-0.02em]">
-      {kit && <link rel="stylesheet" href={googleFontsHref([fontsById(kit.fonts)])} precedence="default" />}
-      <header className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-5 py-5">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          {site.logoUrl ? (
-            <>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={site.logoUrl} alt={`Logo de ${site.name}`} className="size-12 rounded-lg object-contain" />
-              <span className="text-xl font-bold [font-family:var(--s-heading)]">{site.name}</span>
-            </>
-          ) : kit ? (
-            <Fit align="start" className="max-w-md">
-              <BrandLogo kit={kit} name={site.name} size={44} compact />
-            </Fit>
-          ) : (
-            <>
-              <span className="flex size-12 items-center justify-center rounded-lg bg-[var(--s-primary)] text-lg font-bold text-[var(--s-on-primary)] [font-family:var(--s-heading)]">
-                {initials}
-              </span>
-              <span className="text-xl font-bold [font-family:var(--s-heading)]">{site.name}</span>
-            </>
-          )}
+    <div style={{ ...siteTheme(palette, fonts.heading.family, fonts.body.family, tpl, kit), fontFamily: "var(--text)" }} className="min-h-full bg-[var(--bg)] text-[var(--ink)] antialiased">
+      <link rel="stylesheet" href={googleFontsHref([fonts])} precedence="default" />
+      <header className={`${shell} flex items-center justify-between gap-4 py-5`}>
+        <div className="flex min-w-0 flex-1 items-center">
+          <Logo c={c} onDark={dark} />
         </div>
-        {waFirst ? (
-          <a href={wa!} target="_blank" rel="noopener" className="hidden min-h-11 items-center rounded-full bg-[#1d7a45] px-5 font-semibold text-white sm:inline-flex">
-            WhatsApp
+        <nav aria-label="Secciones" className="hidden items-center gap-7 text-sm font-medium text-[var(--muted)] md:flex">
+          {site.services.length > 0 && <a href="#servicios" className="hover:text-[var(--ink)]">Servicios</a>}
+          {kit?.base?.story && tpl.about !== "ninguno" && <a href="#nosotros" className="hover:text-[var(--ink)]">Nosotros</a>}
+          <a href="#contacto" className="hover:text-[var(--ink)]">Contacto</a>
+        </nav>
+        {c.waFirst && wa ? (
+          <a href={wa} target="_blank" rel="noopener" className={`${btnWa} min-h-11 px-4 text-sm`}>
+            <WaIcon className="size-4" /> <span className="hidden sm:inline">WhatsApp</span>
           </a>
         ) : (
-          <a href="#cotizacion" className="hidden min-h-11 items-center rounded-full bg-[var(--s-primary)] px-5 font-semibold text-[var(--s-on-primary)] sm:inline-flex">
-            {cta}
+          <a href="#contacto" className={`${btnPrimary} min-h-11 px-4 text-sm`}>
+            {c.cta}
           </a>
         )}
       </header>
 
-      <section className="mx-auto grid max-w-5xl gap-8 px-5 py-10 md:grid-cols-2 md:items-center">
-        <div className="flex flex-col gap-5">
-          <p className="text-sm font-semibold uppercase tracking-widest text-[var(--s-eyebrow)]">
-            {site.industry}
-            {site.zone ? ` · ${site.zone}` : ""}
-          </p>
-          <h1 className="text-4xl font-bold leading-tight sm:text-5xl">{site.tagline}</h1>
-          <p className="text-lg text-[var(--s-body)]">{site.intro}</p>
-          <div className="flex flex-wrap gap-3">
-            {waFirst && (
-              <a href={wa!} target="_blank" rel="noopener" className="inline-flex min-h-12 items-center rounded-full bg-[#1d7a45] px-6 font-semibold text-white">
-                {waLabel}
-              </a>
-            )}
-            <a
-              href="#cotizacion"
-              className={`inline-flex min-h-12 items-center rounded-full px-6 font-semibold ${waFirst ? "border border-[var(--s-ink)]" : "bg-[var(--s-primary)] text-[var(--s-on-primary)]"}`}
-            >
-              {cta}
-            </a>
-          </div>
+      <main>
+        <Hero c={c} />
+        <Services c={c} />
+        <About c={c} />
+        <Gallery c={c} />
+        <Contact c={c} leadForm={leadForm} />
+      </main>
+
+      <footer className={`${shell} flex flex-col gap-6 border-t border-[var(--line)] py-10 sm:flex-row sm:items-end sm:justify-between`}>
+        <div className="flex flex-col gap-2">
+          <span className={`font-semibold tracking-tight [font-family:var(--heading)] ${tpl.big ? "text-4xl sm:text-6xl" : "text-2xl"}`}>{site.name}</span>
+          {kit && <span className="text-[var(--muted)]">{kit.slogan}</span>}
         </div>
-        {site.photos[0] ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={site.photos[0]} alt={`Trabajo de ${site.name}`} className="aspect-[4/3] w-full rounded-2xl object-cover" />
-        ) : (
-          <div
-            style={{ background: "var(--s-hero)" }}
-            className={`flex aspect-[4/3] w-full flex-col items-center justify-center gap-4 rounded-2xl p-6 text-center ${kit ? "text-[var(--s-on-primary)]" : "text-[var(--s-eyebrow)]"}`}
-          >
-            {kit ? (
-              <>
-                <BrandLogo kit={kit} name={site.name} variant={kit.layout === "emblema" ? "principal" : "isotipo"} theme="blanco" size={kit.layout === "emblema" ? 80 : 96} />
-                <span className="text-2xl font-bold [font-family:var(--s-heading)]">{kit.slogan}</span>
-              </>
-            ) : (
-              site.name
-            )}
-          </div>
-        )}
-      </section>
-
-      {site.services.length > 0 && (
-        <section className="mx-auto max-w-5xl px-5 py-10">
-          <h2 className="mb-2 text-3xl font-bold">Lo que ofrecemos</h2>
-          {site.secondaryCurrency && (
-            <p className="mb-5 text-[var(--s-body)]">
-              Precios en {currencyName(site.currency)}; también aceptamos {currencyName(site.secondaryCurrency)}.
-            </p>
-          )}
-          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {site.services.map((s) => (
-              <li key={s.name} className="flex flex-col gap-1 rounded-2xl border border-[var(--s-line)] bg-white p-5">
-                <span className="text-lg font-semibold">{s.name}</span>
-                <span className="text-[var(--s-eyebrow)]">{priceLabel(s.price, site.currency)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {site.photos.length > 1 && (
-        <section className="mx-auto max-w-5xl px-5 py-10">
-          <h2 className="mb-5 text-3xl font-bold">Nuestros trabajos</h2>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-            {site.photos.slice(1).map((url) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img key={url} src={url} alt={`Trabajo de ${site.name}`} className="aspect-square w-full rounded-xl object-cover" />
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section id="cotizacion" className="mx-auto grid max-w-5xl gap-8 px-5 py-12 md:grid-cols-2">
-        <div className="flex flex-col gap-3">
-          <h2 className="text-3xl font-bold">{cta}</h2>
-          <p className="text-[var(--s-body)]">{site.copy?.leadIntro ?? "Déjanos tus datos y te contestamos hoy mismo."}</p>
-          <dl className="flex flex-col gap-2 text-[var(--s-body)]">
-            {site.hours && (
-              <div>
-                <dt className="inline font-semibold">Horario: </dt>
-                <dd className="inline">{site.hours}</dd>
-              </div>
-            )}
-            {site.address && (
-              <div>
-                <dt className="inline font-semibold">Dirección: </dt>
-                <dd className="inline">{site.address}</dd>
-              </div>
-            )}
-            {site.phone && (
-              <div>
-                <dt className="inline font-semibold">Teléfono: </dt>
-                <dd className="inline">
-                  <a href={`tel:${site.phone}`} className="underline underline-offset-4">
-                    {site.phone}
-                  </a>
-                </dd>
-              </div>
-            )}
-            {site.paymentMethods && site.paymentMethods.length > 0 && (
-              <div>
-                <dt className="inline font-semibold">{site.copy?.payments ?? "Aceptamos"}: </dt>
-                <dd className="inline">{site.paymentMethods.join(", ")}</dd>
-              </div>
-            )}
-          </dl>
-          {wa && (
-            <a href={wa} target="_blank" rel="noopener" className="inline-flex min-h-12 items-center self-start rounded-full bg-[#1d7a45] px-6 font-semibold text-white">
-              {waLabel}
-            </a>
-          )}
-        </div>
-        {leadForm ?? (
-          <div className="rounded-2xl border border-dashed border-[var(--s-line)] p-6 text-[var(--s-eyebrow)]">
-            Aquí aparece el formulario de cotización.
-          </div>
-        )}
-      </section>
-
-      <footer className="border-t border-[var(--s-line)] px-5 py-6 text-center text-sm text-[var(--s-footer)]">
-        {kit ? `${site.name} · ${kit.slogan}` : site.name} · Página hecha con Orbusiness
+        <span className="text-sm text-[var(--muted)]">Página hecha con Orbusiness</span>
       </footer>
+
+      {wa && !preview && (
+        <a href={wa} target="_blank" rel="noopener" aria-label={c.waLabel} className="fixed bottom-5 right-5 z-20 flex size-14 items-center justify-center rounded-full bg-[#1F8A4C] text-white shadow-xl md:hidden">
+          <WaIcon className="size-7" />
+        </a>
+      )}
     </div>
   );
 }
