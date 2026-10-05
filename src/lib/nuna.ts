@@ -52,6 +52,7 @@ const AnswerSchema = z.object({
   currency_choice: z.enum(["local", "other", "both"]).nullable(),
   payment_methods: z.array(z.string()).nullable().describe("Formas de pago con su nombre local"),
   address_form: z.enum(["tu", "usted", "vos"]).nullable(),
+  business_name: z.string().nullable().describe("Nombre del negocio si el dueño lo menciona de paso; si no, null"),
   services: z
     .array(z.object({ name: z.string(), price: z.number().nullable() }))
     .nullable()
@@ -67,7 +68,9 @@ const SYSTEM =
   "(por ejemplo, una tienda que no hace trabajos no visita antes de cotizar: bool_value=false; una tienda que cobra al vender: payment_timing=at_sale). " +
   "Solo si la respuesta no tiene nada que ver con la pregunta, marca understood=false y en reply pide el dato de forma amable. " +
   "Entiende las palabras y costumbres del país del negocio (por ejemplo, en Nicaragua 'pesos' son córdobas y 'fiado' es crédito). " +
-  "En reply habla en español natural de ese país, cálido y breve; nunca uses 'vosotros'.";
+  "En reply habla en español natural de ese país, cálido y breve; nunca uses 'vosotros'. " +
+  "Si el dueño menciona de paso el nombre de su negocio, ponlo en business_name. " +
+  "En reply no digas que anotaste datos distintos del que se pidió (excepto el nombre del negocio).";
 
 function userPrompt(key: QuestionKey, answer: string, b: B) {
   const q = questionFor(key)!;
@@ -97,6 +100,14 @@ const BOOL_FIELD: Partial<Record<QuestionKey, keyof BusinessPatch>> = {
 
 // Convierte la respuesta de la IA en cambios para el negocio.
 function toExtraction(key: QuestionKey, out: Answer, b: B): Extraction {
+  const result = extractMain(key, out, b);
+  // El nombre del negocio dicho de paso se guarda aunque la respuesta principal no sirva.
+  const name = key !== "name" ? out.business_name?.trim() : null;
+  if (!name) return result;
+  return { ...result, patch: { ...(result.patch ?? {}), name } } as Extraction;
+}
+
+function extractMain(key: QuestionKey, out: Answer, b: B): Extraction {
   if (!out.understood) return { ok: false, ack: out.reply };
 
   const patch: BusinessPatch = {};
@@ -123,7 +134,11 @@ function toExtraction(key: QuestionKey, out: Answer, b: B): Extraction {
   }
   if (key === "phone") {
     const phone = normalizePhone(out.text_value ?? "", marketFor(b.country_code));
-    if (!phone) return { ok: false, ack: out.reply };
+    if (!phone)
+      return {
+        ok: false,
+        ack: "No estoy segura de qué país es ese número. ¿Me lo escribes con el código de país? Por ejemplo: +505 8888 7777.",
+      };
     patch.phone = phone;
   }
   if (key === "payment_methods") {
@@ -159,9 +174,19 @@ function toExtraction(key: QuestionKey, out: Answer, b: B): Extraction {
 // DEEPSEEK_BASE_URL permite usar DeepSeek desde otro proveedor compatible (por ejemplo, con servidores en EE.UU.).
 const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com";
 const JSON_EXAMPLE =
-  '{"understood": true, "reply": "Anotado.", "text_value": "Ferretería El Martillo", "bool_value": null, "business_type": null, "country": null, "payment_timing": null, "services": null, "currency_choice": null, "payment_methods": null, "address_form": null}';
+  '{"understood": true, "reply": "Anotado.", "text_value": "Ferretería El Martillo", "bool_value": null, "business_type": null, "country": null, "payment_timing": null, "services": null, "currency_choice": null, "payment_methods": null, "address_form": null, "business_name": null}';
 
+// DeepSeek a veces devuelve vacío: se reintenta una vez antes de caer a las reglas.
 async function askDeepSeek(key: QuestionKey, answer: string, b: B): Promise<Answer> {
+  try {
+    return await askDeepSeekOnce(key, answer, b);
+  } catch (error) {
+    console.warn("Nuna (deepseek) reintenta:", error);
+    return askDeepSeekOnce(key, answer, b);
+  }
+}
+
+async function askDeepSeekOnce(key: QuestionKey, answer: string, b: B): Promise<Answer> {
   const response = await fetch(`${DEEPSEEK_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
     headers: {
@@ -180,7 +205,7 @@ async function askDeepSeek(key: QuestionKey, answer: string, b: B): Promise<Answ
             "understood (boolean), reply (string), text_value (string o null), bool_value (boolean o null), " +
             'business_type ("products", "services", "both" o null), country (string o null), ' +
             'payment_timing ("before", "deposit", "after", "at_sale", "credit" o null), services (lista de {"name", "price"} donde price es número o null, o null), ' +
-            'currency_choice ("local", "other", "both" o null), payment_methods (lista de textos o null), address_form ("tu", "usted", "vos" o null). ' +
+            'currency_choice ("local", "other", "both" o null), payment_methods (lista de textos o null), address_form ("tu", "usted", "vos" o null), business_name (string o null). ' +
             `Ejemplo de json: ${JSON_EXAMPLE}`,
         },
         { role: "user", content: userPrompt(key, answer, b) },

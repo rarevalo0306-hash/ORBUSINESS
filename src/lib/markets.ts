@@ -17,6 +17,7 @@ export type Market = {
   currency: string; // moneda principal (ISO 4217)
   secondCurrency?: string; // otra moneda muy usada en precios (p. ej. dólares)
   dialCode: string;
+  localDigits: number; // largo del número local, sin código de país
   addressForm: AddressForm; // trato más común con clientes
   addressStyle: string;
   paymentMethods: string[];
@@ -33,6 +34,7 @@ export const MARKETS: Market[] = [
     match: ["mexico", "cdmx", "guadalajara", "monterrey", "puebla", "tijuana", "oaxaca", "merida", "cancun", "queretaro", "guanajuato", "veracruz", "chihuahua", "toluca", "morelia", "hermosillo"],
     currency: "MXN",
     dialCode: "52",
+    localDigits: 10,
     addressForm: "tu",
     addressStyle: "calle y número, colonia, código postal y ciudad",
     paymentMethods: ["Efectivo", "Transferencia SPEI", "Tarjeta", "Pago en OXXO", "Mercado Pago", "Meses sin intereses"],
@@ -53,6 +55,7 @@ export const MARKETS: Market[] = [
     match: ["guatemala", "xela", "quetzaltenango", "mixco", "escuintla", "huehuetenango"],
     currency: "GTQ",
     dialCode: "502",
+    localDigits: 8,
     addressForm: "usted",
     addressStyle: "dirección por zona (por ejemplo, 5a avenida 10-20, zona 1) y municipio",
     paymentMethods: ["Efectivo", "Transferencia", "Depósito bancario", "Tarjeta"],
@@ -71,6 +74,7 @@ export const MARKETS: Market[] = [
     match: ["honduras", "tegucigalpa", "san pedro sula", "la ceiba", "comayagua", "choluteca"],
     currency: "HNL",
     dialCode: "504",
+    localDigits: 8,
     addressForm: "usted",
     addressStyle: "colonia, calle y puntos de referencia",
     paymentMethods: ["Efectivo", "Transferencia", "Tarjeta", "Tigo Money"],
@@ -89,6 +93,7 @@ export const MARKETS: Market[] = [
     match: ["el salvador", "san salvador", "soyapango", "santa tecla"],
     currency: "USD",
     dialCode: "503",
+    localDigits: 8,
     addressForm: "usted",
     addressStyle: "colonia, calle, número y puntos de referencia",
     paymentMethods: ["Efectivo", "Transferencia", "Tarjeta"],
@@ -107,6 +112,7 @@ export const MARKETS: Market[] = [
     currency: "NIO",
     secondCurrency: "USD",
     dialCode: "505",
+    localDigits: 8,
     addressForm: "vos",
     addressStyle:
       "puntos de referencia (por ejemplo: de donde fue el cine, 2 cuadras al lago, 1 cuadra arriba), barrio y ciudad",
@@ -133,6 +139,7 @@ export const MARKETS: Market[] = [
     currency: "CRC",
     secondCurrency: "USD",
     dialCode: "506",
+    localDigits: 8,
     addressForm: "usted",
     addressStyle: "metros desde un punto de referencia (por ejemplo: 200 metros norte de la iglesia) y distrito",
     paymentMethods: ["Efectivo", "SINPE Móvil", "Tarjeta", "Transferencia"],
@@ -152,6 +159,7 @@ export const MARKETS: Market[] = [
     match: ["panama", "chiriqui", "ciudad de panama"],
     currency: "USD",
     dialCode: "507",
+    localDigits: 8,
     addressForm: "usted",
     addressStyle: "corregimiento, calle y puntos de referencia",
     paymentMethods: ["Efectivo", "Yappy", "Tarjeta", "Transferencia ACH"],
@@ -170,6 +178,7 @@ export const MARKETS: Market[] = [
     match: ["colombia", "bogota", "medellin", "cali", "barranquilla", "cartagena", "bucaramanga"],
     currency: "COP",
     dialCode: "57",
+    localDigits: 10,
     addressForm: "usted",
     addressStyle: "calle o carrera con número (por ejemplo: Cra 7 # 45-10), barrio y ciudad",
     paymentMethods: ["Efectivo", "Nequi", "Daviplata", "Transferencia Bancolombia", "PSE", "Tarjeta"],
@@ -190,6 +199,7 @@ export const MARKETS: Market[] = [
     currency: "USD",
     secondCurrency: "VES",
     dialCode: "58",
+    localDigits: 10,
     addressForm: "tu",
     addressStyle: "urbanización o sector, calle y puntos de referencia",
     paymentMethods: ["Efectivo en dólares", "Pago móvil", "Zelle", "Punto de venta", "Transferencia"],
@@ -208,6 +218,7 @@ export const MARKETS: Market[] = [
     match: ["ecuador", "quito", "guayaquil", "cuenca"],
     currency: "USD",
     dialCode: "593",
+    localDigits: 9,
     addressForm: "usted",
     addressStyle: "calle principal y secundaria, número, sector y referencia",
     paymentMethods: ["Efectivo", "Transferencia", "Tarjeta"],
@@ -225,6 +236,7 @@ export const MARKETS: Market[] = [
     match: ["peru", "lima", "arequipa", "trujillo", "cusco", "piura"],
     currency: "PEN",
     dialCode: "51",
+    localDigits: 9,
     addressForm: "tu",
     addressStyle: "avenida, jirón o calle con número, distrito y referencia",
     paymentMethods: ["Efectivo", "Yape", "Plin", "Tarjeta", "Transferencia"],
@@ -244,6 +256,7 @@ export const MARKETS: Market[] = [
     match: ["bolivia", "la paz", "santa cruz", "cochabamba", "el alto", "sucre"],
     currency: "BOB",
     dialCode: "591",
+    localDigits: 8,
     addressForm: "usted",
     addressStyle: "zona, calle con número y referencia",
     paymentMethods: ["Efectivo", "Pago con QR", "Transferencia", "Tarjeta"],
@@ -261,6 +274,7 @@ export const MARKETS: Market[] = [
     match: ["chile", "santiago de chile", "valparaiso", "concepcion", "antofagasta"],
     currency: "CLP",
     dialCode: "56",
+    localDigits: 9,
     addressForm: "tu",
     addressStyle: "calle y número, comuna y ciudad",
     paymentMethods: ["Transferencia", "Tarjeta de débito", "Efectivo", "Mercado Pago"],
@@ -279,6 +293,7 @@ export const MARKETS: Market[] = [
     match: ["argentina", "buenos aires", "cordoba argentina", "rosario", "mendoza"],
     currency: "ARS",
     dialCode: "54",
+    localDigits: 10,
     addressForm: "vos",
     addressStyle: "calle y número, barrio y ciudad",
     paymentMethods: ["Efectivo", "Transferencia", "Mercado Pago", "Tarjeta en cuotas"],
@@ -297,6 +312,7 @@ export const MARKETS: Market[] = [
     match: ["uruguay", "montevideo", "punta del este"],
     currency: "UYU",
     dialCode: "598",
+    localDigits: 8,
     addressForm: "tu",
     addressStyle: "calle y número, barrio y ciudad",
     paymentMethods: ["Efectivo", "Transferencia", "Tarjeta de débito", "Mercado Pago"],
@@ -313,6 +329,7 @@ export const MARKETS: Market[] = [
     match: ["paraguay", "asuncion", "ciudad del este", "encarnacion"],
     currency: "PYG",
     dialCode: "595",
+    localDigits: 9,
     addressForm: "vos",
     addressStyle: "calle, barrio y puntos de referencia",
     paymentMethods: ["Efectivo", "Transferencia", "Tarjeta", "Billetera Tigo Money"],
@@ -331,6 +348,7 @@ export const MARKETS: Market[] = [
     match: ["dominicana", "santo domingo", "santiago de los caballeros", "punta cana"],
     currency: "DOP",
     dialCode: "1",
+    localDigits: 10,
     addressForm: "tu",
     addressStyle: "calle y número, sector y ciudad",
     paymentMethods: ["Efectivo", "Transferencia", "Tarjeta"],
@@ -347,6 +365,7 @@ export const MARKETS: Market[] = [
     match: ["estados unidos", "usa", "eeuu", "ee.uu", "united states", "miami", "florida", "texas", "houston", "dallas", "california", "los angeles", "chicago", "new york", "nueva york", "new jersey", "nueva jersey", "arizona", "georgia", "carolina"],
     currency: "USD",
     dialCode: "1",
+    localDigits: 10,
     addressForm: "tu",
     addressStyle: "calle y número, ciudad, estado y código postal (ZIP)",
     paymentMethods: ["Tarjeta", "Zelle", "Venmo", "Cash App", "Efectivo"],
@@ -363,6 +382,7 @@ export const MARKETS: Market[] = [
     match: ["canada", "toronto", "montreal", "vancouver", "calgary", "ottawa", "quebec", "edmonton", "winnipeg"],
     currency: "CAD",
     dialCode: "1",
+    localDigits: 10,
     addressForm: "tu",
     addressStyle: "calle y número, ciudad, provincia y código postal",
     paymentMethods: ["Tarjeta", "Interac e-Transfer", "Efectivo"],
@@ -413,11 +433,20 @@ export function marketContext(m: Market | null): string {
 }
 
 // Teléfono con código de país, listo para WhatsApp (+50588887777).
+// Reconoce números locales del país del negocio, números con código de país y números
+// de EE.UU./Canadá (10 dígitos), que son comunes entre negocios latinos. Si es ambiguo, devuelve null.
 export function normalizePhone(raw: string, m: Market | null): string | null {
-  const digits = raw.replace(/[^\d+]/g, "");
-  if (digits.replace(/\D/g, "").length < 7) return null;
-  if (digits.startsWith("+")) return `+${digits.slice(1).replace(/\D/g, "")}`;
-  const d = digits.replace(/\D/g, "");
-  if (m && d.startsWith(m.dialCode) && d.length > 9) return `+${d}`;
-  return m ? `+${m.dialCode}${d}` : `+${d}`;
+  const trimmed = raw.trim();
+  let d = trimmed.replace(/\D/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  if (d.length < 7 || d.length > 15) return null;
+  if (trimmed.startsWith("+") || raw.trim().startsWith("00")) return `+${d}`;
+  if (m && d.length === m.localDigits) return `+${m.dialCode}${d}`;
+  // Ya trae el código de algún país que conocemos.
+  for (const market of [m, ...MARKETS].filter(Boolean) as Market[]) {
+    if (d.startsWith(market.dialCode) && d.length === market.dialCode.length + market.localDigits) return `+${d}`;
+  }
+  // 10 dígitos en un país donde el número local no es de 10: número de EE.UU. o Canadá.
+  if (d.length === 10 && (!m || m.localDigits !== 10)) return `+1${d}`;
+  return null;
 }

@@ -136,7 +136,10 @@ export const QUESTIONS: Question[] = [
     label: "Dirección",
     text: (b) => {
       const m = marketFor(b.country_code);
-      return `¿Cuál es la dirección del negocio? Dímela como se la das a tus clientes${m ? ` (por ejemplo: ${m.addressStyle})` : ""}.`;
+      if (!m) return "¿Cuál es la dirección del negocio? Dímela como se la das a tus clientes.";
+      const example = m.addressStyle.match(/\(por ejemplo:?\s*([^)]*)\)/i)?.[1];
+      const style = m.addressStyle.replace(/\s*\(por ejemplo[^)]*\)/i, "");
+      return `¿Cuál es la dirección del negocio? Dímela como se la das a tus clientes, con ${style}.${example ? ` Por ejemplo: ${example}.` : ""}`;
     },
     hint: () => "text_value = la dirección tal como la daría a un cliente, con sus puntos de referencia.",
     applies: sells,
@@ -429,9 +432,10 @@ export function describeAnswer(key: QuestionKey, b: BusinessRow, services: Servi
 
 // ---------- lectura de respuestas por reglas ----------
 
+// patch en un resultado fallido = datos extra que el dueño dijo de paso (por ejemplo, el nombre).
 export type Extraction =
   | { ok: true; ack: string; patch: BusinessPatch; services?: ServiceInput[] }
-  | { ok: false; ack: string };
+  | { ok: false; ack: string; patch?: BusinessPatch };
 
 export function extractWithRules(key: QuestionKey, raw: string, b: B): Extraction {
   let text = raw.trim();
@@ -459,7 +463,7 @@ export function extractWithRules(key: QuestionKey, raw: string, b: B): Extractio
     }
     case "phone": {
       const phone = normalizePhone(text, marketFor(b.country_code));
-      if (!phone) return { ok: false, ack: "No alcancé a leer el número. ¿Me lo escribes con todos los dígitos?" };
+      if (!phone) return { ok: false, ack: "No estoy segura de qué país es ese número. ¿Me lo escribes con el código de país? Por ejemplo: +505 8888 7777." };
       return { ok: true, ack: `Anotado: ${phone}.`, patch: { phone } };
     }
     case "address":

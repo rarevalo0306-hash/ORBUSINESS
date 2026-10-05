@@ -88,6 +88,16 @@ export async function answerInterview(text: string) {
   await supabase.from("interview_messages").insert({ business_id: business.id, role: "owner", step_key: step, content: answer });
   const result = await extractAnswer(q.key, answer, business);
   if (!result.ok) {
+    if (result.patch && Object.keys(result.patch).length) {
+      await supabase.from("businesses").update(result.patch).eq("id", business.id);
+      await supabase.from("audit_log").insert({
+        business_id: business.id,
+        actor: "nuna",
+        actor_user_id: user.id,
+        action: "interview.extra_saved",
+        data: { step: q.key, patch: result.patch },
+      });
+    }
     await nuna(supabase, business.id, step, result.ack);
     revalidatePath("/onboarding", "layout");
     return;
