@@ -15,7 +15,8 @@ import {
   type QuestionKey,
 } from "@/lib/interview";
 
-type B = Pick<BusinessRow, "business_type" | "country_code">;
+type B = Pick<BusinessRow, "business_type" | "country_code"> &
+  Partial<Pick<BusinessRow, "name" | "industry" | "owner_name">>;
 
 // ---------- Proveedor de IA ----------
 // Se elige con NUNA_AI_PROVIDER = "deepseek" | "anthropic" | "rules".
@@ -76,7 +77,13 @@ function userPrompt(key: QuestionKey, answer: string, b: B) {
   const q = questionFor(key)!;
   const kind = { products: "tienda (vende productos)", services: "servicios", both: "productos y servicios" }[b.business_type ?? ""];
   const market = marketContext(marketFor(b.country_code));
+  const known = [
+    b.name && b.name !== "Mi negocio" ? `Negocio: ${b.name}` : null,
+    b.industry ? `Giro: ${b.industry}` : null,
+    b.owner_name ? `Dueño: ${b.owner_name}` : null,
+  ].filter(Boolean);
   return (
+    `${known.length ? `Lo que ya sabes del negocio (úsalo, no lo vuelvas a preguntar): ${known.join("; ")}.\n` : ""}` +
     `${market ? `${market}\n` : ""}` +
     `${kind ? `Tipo de negocio: ${kind}.\n` : ""}` +
     `Pregunta (${key}): ${q.text(b)}\nQué hay que extraer: ${q.hint(b)}\n\nRespuesta del dueño:\n${answer}`

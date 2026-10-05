@@ -256,6 +256,48 @@ export function withoutQuestions(ack: string): string {
   return kept.join(" ").trim() || "Anotado.";
 }
 
+// Giro que se deduce del nombre ("Ferretería Arévalo" -> Ferretería), para no preguntarlo.
+const INDUSTRY_WORDS: [string, string][] = [
+  ["ferreter", "Ferretería"],
+  ["pulper", "Pulpería"],
+  ["farmac", "Farmacia"],
+  ["panader", "Panadería"],
+  ["reposter", "Repostería"],
+  ["abarrot", "Abarrotes"],
+  ["minisuper", "Minisúper"],
+  ["supermercado", "Supermercado"],
+  ["boutique", "Tienda de ropa"],
+  ["zapater", "Zapatería"],
+  ["librer", "Librería"],
+  ["papeler", "Papelería"],
+  ["taller", "Taller mecánico"],
+  ["salon de belleza", "Salón de belleza"],
+  ["estetica", "Salón de belleza"],
+  ["barber", "Barbería"],
+  ["jardin", "Jardinería"],
+  ["limpieza", "Limpieza"],
+  ["plomer", "Plomería"],
+  ["restaurante", "Restaurante"],
+  ["comedor", "Comedor"],
+  ["fritanga", "Fritanga"],
+  ["taqueria", "Taquería"],
+  ["cafeter", "Cafetería"],
+  ["veterinar", "Veterinaria"],
+  ["clinica", "Clínica"],
+  ["consultorio", "Consultorio"],
+  ["carpinter", "Carpintería"],
+  ["floristeria", "Floristería"],
+  ["lavander", "Lavandería"],
+  ["fumiga", "Fumigación"],
+  ["mudanza", "Mudanzas"],
+  ["construc", "Construcción"],
+];
+
+export function industryFromName(name: string): string | null {
+  const t = norm(name);
+  return INDUSTRY_WORDS.find(([w]) => t.includes(w))?.[1] ?? null;
+}
+
 // ---------- moneda ----------
 
 const SYMBOLS: Record<string, string> = {

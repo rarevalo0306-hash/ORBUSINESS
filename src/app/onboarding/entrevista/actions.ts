@@ -5,6 +5,7 @@ import { requireBusiness } from "@/lib/business";
 import {
   CLOSING,
   QUESTIONS,
+  industryFromName,
   missingQuestions,
   questionFor,
   type BusinessRow,
@@ -102,7 +103,16 @@ export async function answerInterview(text: string) {
     revalidatePath("/onboarding", "layout");
     return;
   }
-  const updated = await saveExtraction(supabase, business, user.id, q.key, result);
+  let updated = await saveExtraction(supabase, business, user.id, q.key, result);
+
+  // Si el nombre ya dice el giro ("Ferretería Arévalo"), no se pregunta a qué se dedica.
+  if (q.key === "name" && !updated.industry) {
+    const industry = industryFromName(updated.name);
+    if (industry) {
+      const { data } = await supabase.from("businesses").update({ industry }).eq("id", business.id).select("*").single();
+      if (data) updated = data;
+    }
+  }
 
   // Siguiente: lo primero que falte (así una corrección o un cambio de tipo de negocio
   // hace que Nuna pregunte lo que ahora aplica).
