@@ -24,6 +24,7 @@ import {
   volanteArt,
   type BrandCtx,
 } from "@/lib/brand-art";
+import { bookPages } from "@/lib/brand-book";
 import { artSvg, logoArt, type Art, type LogoTheme, type LogoVariant } from "@/lib/brand-render";
 
 // Archivos del kit de marca en todos los formatos: SVG (vector), PNG (fondo transparente), JPG,
@@ -61,6 +62,7 @@ const logoItem = (id: string, label: string, variant: LogoVariant, theme: LogoTh
 });
 
 export const ITEMS: Item[] = [
+  { id: "manual", label: "Manual de marca (libro completo)", group: "Presentación", formats: ["pdf"], px: 1920, art: bookPages },
   { id: "tablero", label: "Tablero de marca (presentación)", group: "Presentación", formats: ["png", "jpg", "pdf"], px: 2400, art: tableroArt },
   logoItem("logo", "Logo principal", "principal", "color", ["svg", "png", "jpg", "pdf", "psd"], 2400),
   logoItem("logo-vertical", "Logo vertical", "vertical", "color", ["svg", "png", "pdf"], 1600),
@@ -112,8 +114,10 @@ const MIME: Record<Format | "zip", string> = {
 
 export const ZIP_NAME = "kit-de-marca.zip";
 
-export function parseFile(file: string): { item: Item; format: Format } | "zip" | null {
+export function parseFile(file: string): { item: Item; format: Format } | { page: number } | "zip" | null {
   if (file === ZIP_NAME) return "zip";
+  const page = file.match(/^manual-(\d{1,2})\.png$/);
+  if (page) return { page: Number(page[1]) };
   const m = file.match(/^([a-z-]+)\.([a-z]+)$/);
   const item = m && ITEMS.find((i) => i.id === m[1]);
   if (!item || !item.formats.includes(m![2] as Format)) return null;
@@ -295,7 +299,7 @@ export async function brandFile(c: BrandCtx, item: Item, format: Format): Promis
         return toJpg(first(arts), item.px);
       case "pdf":
         // Logos: página del tamaño del logo, ampliada para que se vea bien al abrirla.
-        return toPdf(list, `${item.label} · ${c.name}`, item.group === "Logo" ? 3 : 1);
+        return toPdf(list, `${item.label} · ${c.name}`, item.group === "Logo" ? 3 : item.id === "manual" ? 0.5 : 1);
       case "psd":
         return toPsd(first(arts), item.px);
       default:
@@ -304,6 +308,14 @@ export async function brandFile(c: BrandCtx, item: Item, format: Format): Promis
   };
   const data = await out();
   return { data: typeof data === "string" ? Buffer.from(data) : data, type: MIME[format] };
+}
+
+// Una página del manual, en PNG (para verlo en pantalla).
+export async function bookPage(c: BrandCtx, n: number) {
+  const pages = await bookPages(c);
+  const page = pages[n - 1];
+  if (!page) return null;
+  return { data: await toPng(page, 1920), type: MIME.png, count: pages.length };
 }
 
 // Todo el kit en un .zip, ordenado en carpetas.

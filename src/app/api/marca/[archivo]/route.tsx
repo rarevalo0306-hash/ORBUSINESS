@@ -1,5 +1,5 @@
 import { storedKit } from "@/lib/brand";
-import { brandFile, brandZip, parseFile } from "@/lib/brand-files";
+import { bookPage, brandFile, brandZip, parseFile } from "@/lib/brand-files";
 import { brandCtx } from "@/lib/brand-store";
 import { publicAssetUrl } from "@/lib/business";
 import { slugify } from "@/lib/site";
@@ -29,6 +29,11 @@ export async function GET(request: Request, ctx: RouteContext<"/api/marca/[archi
 
   const host = request.headers.get("host") ?? "orbusiness.app";
   const c = await brandCtx(supabase, b, kit, host);
+  if (typeof parsed === "object" && "page" in parsed) {
+    const page = await bookPage(c, parsed.page);
+    if (!page) return new Response("No encontrado", { status: 404 });
+    return new Response(new Uint8Array(page.data), { headers: { "Content-Type": page.type, "Cache-Control": "private, max-age=300" } });
+  }
   const file = parsed === "zip" ? await brandZip(c) : await brandFile(c, parsed.item, parsed.format);
   const filename = `${slugify(b.name)}-${archivo}`;
   const inline = new URL(request.url).searchParams.has("ver");
