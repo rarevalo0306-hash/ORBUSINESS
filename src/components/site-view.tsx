@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { BrandLogo } from "@/components/brand-logo";
-import { contrast, fontsById, googleFontsHref, gradientCss, onColor, paletteById, sanitizeKit, type BrandKit } from "@/lib/brand";
+import { Fit } from "@/components/fit";
+import { contrast, fontsById, googleFontsHref, gradientCss, kitPalette, onColor, patternCss, sanitizeKit, type BrandKit } from "@/lib/brand";
 import { currencyName, priceLabel } from "@/lib/interview";
 import type { SiteContent } from "@/lib/site";
 
@@ -22,7 +23,7 @@ const BASE_THEME = {
 };
 
 function brandTheme(kit: BrandKit) {
-  const p = paletteById(kit.palette);
+  const p = kitPalette(kit);
   const f = fontsById(kit.fonts);
   return {
     "--s-bg": p.light,
@@ -36,7 +37,7 @@ function brandTheme(kit: BrandKit) {
     "--s-footer": `color-mix(in srgb, ${p.dark} 70%, ${p.light})`,
     "--s-heading": `"${f.heading.family}", system-ui, sans-serif`,
     "--s-text": `"${f.body.family}", system-ui, sans-serif`,
-    "--s-hero": gradientCss(p),
+    "--s-hero": `${patternCss(kit, "#FFFFFF", 0.12)}, ${gradientCss(p)}`,
   };
 }
 
@@ -63,7 +64,7 @@ export function SiteView({ site, leadForm }: { site: SiteContent; leadForm?: Rea
     <div style={{ ...theme, fontFamily: "var(--s-text)" }} className="bg-[var(--s-bg)] text-[var(--s-ink)] [&_h1]:[font-family:var(--s-heading)] [&_h2]:[font-family:var(--s-heading)]">
       {kit && <link rel="stylesheet" href={googleFontsHref([fontsById(kit.fonts)])} precedence="default" />}
       <header className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-5 py-5">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           {site.logoUrl ? (
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -71,7 +72,9 @@ export function SiteView({ site, leadForm }: { site: SiteContent; leadForm?: Rea
               <span className="text-xl font-bold [font-family:var(--s-heading)]">{site.name}</span>
             </>
           ) : kit ? (
-            <BrandLogo kit={kit} name={site.name} size={44} />
+            <Fit align="start" className="max-w-md">
+              <BrandLogo kit={kit} name={site.name} size={44} compact />
+            </Fit>
           ) : (
             <>
               <span className="flex size-12 items-center justify-center rounded-lg bg-[var(--s-primary)] text-lg font-bold text-[var(--s-on-primary)] [font-family:var(--s-heading)]">
@@ -124,7 +127,7 @@ export function SiteView({ site, leadForm }: { site: SiteContent; leadForm?: Rea
           >
             {kit ? (
               <>
-                <BrandLogo kit={kit} name={site.name} layout="isotipo" theme="blanco" size={96} />
+                <BrandLogo kit={kit} name={site.name} variant={kit.layout === "emblema" ? "principal" : "isotipo"} theme="blanco" size={kit.layout === "emblema" ? 80 : 96} />
                 <span className="text-2xl font-bold [font-family:var(--s-heading)]">{kit.slogan}</span>
               </>
             ) : (

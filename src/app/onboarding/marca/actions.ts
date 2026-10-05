@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { sanitizeKit, storedKit, storedOptions, type BrandKit } from "@/lib/brand";
-import { proposeKits } from "@/lib/brand-ai";
+import { proposeKits, writeBase } from "@/lib/brand-ai";
 import { brandKitPrice, saveKit } from "@/lib/brand-store";
 import { requireBusiness } from "@/lib/business";
 import type { Json } from "@/lib/database.types";
@@ -95,10 +95,14 @@ export async function generateKits() {
   revalidatePath("/onboarding/marca");
 }
 
+// El dueño elige una propuesta: Nuna le escribe la base de marca completa (historia, misión,
+// valores, voz y textos listos para usar).
 export async function chooseKit(index: number) {
   const { supabase, user, business } = await requireBusiness();
-  const kit = storedOptions(business.brand_options, business)[index];
-  if (!kit) throw new Error("Propuesta no encontrada");
+  const option = storedOptions(business.brand_options, business)[index];
+  if (!option) throw new Error("Propuesta no encontrada");
+  const { data: services } = await supabase.from("services").select("name").eq("business_id", business.id).order("sort");
+  const kit = { ...option, base: await writeBase(business, services ?? [], option) };
   await saveKit(supabase, business, kit, business.brand_status === "purchased" ? {} : { brand_status: "chosen" });
   await supabase.from("audit_log").insert({
     business_id: business.id,
@@ -108,6 +112,17 @@ export async function chooseKit(index: number) {
     data: { name: kit.name },
   });
   revalidatePath("/onboarding/marca");
+}
+
+// Volver a escribir la base de marca (por ejemplo, después de cambiar el eslogan).
+export async function rewriteBase() {
+  const { supabase, business } = await requireBusiness();
+  const current = storedKit(business.brand_kit, business);
+  if (!current) throw new Error("Primero elige una propuesta");
+  const { data: services } = await supabase.from("services").select("name").eq("business_id", business.id).order("sort");
+  await saveKit(supabase, business, { ...current, base: await writeBase(business, services ?? [], current) });
+  revalidatePath("/onboarding/marca");
+  revalidatePath("/manual-de-marca");
 }
 
 // Ajustes del dueño (colores, letra, símbolo, forma, eslogan). Solo valores de las colecciones curadas.

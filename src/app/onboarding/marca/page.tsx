@@ -1,25 +1,33 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import type { ReactNode } from "react";
 import { BrandLogo } from "@/components/brand-logo";
+import { Fit } from "@/components/fit";
 import { SubmitButton } from "@/components/submit-button";
 import { Button, PageTitle } from "@/components/ui";
 import {
   FONT_PAIRS,
+  LAYOUTS,
   fontsById,
   googleFontsHref,
   gradientCss,
   iconsFor,
-  paletteById,
+  kitPalette,
   palettesFor,
+  patternCss,
   storedKit,
   storedOptions,
   type BrandKit,
 } from "@/lib/brand";
+import { FORMAT_LABEL, ITEMS, ZIP_NAME, type Group } from "@/lib/brand-files";
 import { brandKitPrice } from "@/lib/brand-store";
 import { publicAssetUrl, requireBusiness } from "@/lib/business";
-import { chooseKit, generateKits, purchaseKit, saveBrand } from "./actions";
+import { chooseKit, generateKits, purchaseKit, rewriteBase, saveBrand } from "./actions";
 import { KitEditor } from "./kit-editor";
 import { Uploader } from "./uploader";
+
+// Elegir una propuesta hace que Nuna escriba la base de marca (puede tardar).
+export const maxDuration = 120;
 
 const OPTIONS = [
   { value: "new", label: "No tengo página / hazme una nueva", note: "Nuna diseña una página nueva para tu negocio." },
@@ -36,38 +44,51 @@ const OPTIONS = [
 ];
 
 const INCLUDES = [
-  "Logo en todas sus versiones (a color, en blanco, a un color e isotipo), en SVG y PNG",
-  "Manual de marca: cómo usar tu logo, colores con sus códigos, degradado y tipografías",
-  "Imágenes para redes: foto de perfil, portada y primera publicación",
-  "Tarjeta de presentación lista para imprimir y firma para tu email",
+  "Logo en 4 versiones + isotipo y sello, en SVG, PNG, JPG, PDF para Illustrator y PSD para Photoshop",
+  "Base de marca: historia, misión, visión, valores, cliente ideal, promesa y forma de hablar",
+  "Textos listos: bio para redes, descripción para Google y WhatsApp, mensaje de bienvenida, hashtags e ideas de publicaciones",
+  "Redes sociales: foto de perfil, portada, publicación e historia (también en PSD por capas)",
+  "Papelería para imprenta: tarjeta de presentación, hoja membretada (PDF y Word), cotización y volante",
+  "Cómo se ve tu marca: letrero del local, camiseta, bolsa, vehículo y chat de WhatsApp",
+  "Paleta de colores para Adobe, patrón de marca y manual de marca completo",
   "Tu página web con tus colores, tus letras y tu logo",
 ];
 
-const DOWNLOADS = [
-  { file: "logo-horizontal.svg", label: "Logo horizontal (SVG)" },
-  { file: "logo-horizontal.png", label: "Logo horizontal (PNG)" },
-  { file: "logo-vertical.svg", label: "Logo vertical (SVG)" },
-  { file: "logo-blanco.svg", label: "Logo en blanco, para fondos oscuros (SVG)" },
-  { file: "logo-un-color.svg", label: "Logo a un color (SVG)" },
-  { file: "isotipo.svg", label: "Isotipo (SVG)" },
-  { file: "isotipo.png", label: "Isotipo (PNG)" },
-  { file: "perfil.png", label: "Foto de perfil para redes" },
-  { file: "portada.png", label: "Portada para Facebook" },
-  { file: "publicacion.png", label: "Publicación de presentación" },
-];
+const GROUPS: Group[] = ["Logo", "Redes sociales", "Papelería", "Mockups", "Colores y patrón"];
+const GROUP_LABEL: Record<Group, string> = {
+  Logo: "Logo",
+  "Redes sociales": "Redes sociales",
+  Papelería: "Papelería",
+  Mockups: "Tu marca en la vida real",
+  "Colores y patrón": "Colores y patrón",
+};
 
 function Proposal({ kit, name, index, selected }: { kit: BrandKit; name: string; index: number; selected: boolean }) {
-  const p = paletteById(kit.palette);
+  const p = kitPalette(kit);
   const f = fontsById(kit.fonts);
   return (
     <article className={`flex flex-col gap-4 rounded-2xl border bg-panel p-5 ${selected ? "border-lime" : "border-line"}`}>
-      <div className="flex min-h-28 items-center justify-center rounded-xl p-4" style={{ background: p.light }}>
-        <BrandLogo kit={kit} name={name} size={40} className="max-w-full flex-wrap justify-center" />
+      <div
+        className="flex min-h-40 items-center justify-center overflow-hidden rounded-xl p-4"
+        style={{ background: p.light, backgroundImage: patternCss(kit, p.primary, 0.06, 48) }}
+      >
+        <Fit>
+          <BrandLogo kit={kit} name={name} size={kit.layout === "emblema" ? 56 : 44} />
+        </Fit>
       </div>
-      <div className="h-3 rounded-full" style={{ background: gradientCss(p) }} aria-hidden />
-      <div className="flex gap-1.5" aria-label={`Colores: ${p.name}`}>
-        {[p.primary, p.secondary, p.accent, p.dark, p.light].map((c) => (
-          <span key={c} className="h-6 flex-1 rounded-md border border-line" style={{ background: c }} />
+      <div
+        className="flex min-h-20 items-center justify-center gap-3 rounded-xl px-4"
+        style={{ backgroundImage: `${patternCss(kit, "#FFFFFF", 0.12, 40)}, ${gradientCss(p)}` }}
+        aria-hidden
+      >
+        <BrandLogo kit={kit} name={name} variant="isotipo" theme="blanco" size={36} />
+        <span className="text-sm font-semibold text-white" style={{ fontFamily: `"${f.heading.family}"`, fontWeight: f.heading.weight }}>
+          {kit.slogan}
+        </span>
+      </div>
+      <div className="flex gap-1.5" aria-label="Colores">
+        {[p.primary, p.secondary, p.accent, p.dark, p.light].map((c, i) => (
+          <span key={i} className="h-6 flex-1 rounded-md border border-line" style={{ background: c }} />
         ))}
       </div>
       <div className="flex flex-col gap-1">
@@ -78,7 +99,7 @@ function Proposal({ kit, name, index, selected }: { kit: BrandKit; name: string;
         “{kit.slogan}”
       </p>
       <p className="text-sm text-muted">
-        Letra {f.name.toLowerCase()} · {kit.personality.join(" · ")}
+        {LAYOUTS.find((l) => l.id === kit.layout)?.label} · letra {f.name.toLowerCase()} · {kit.personality.join(" · ")}
       </p>
       <form action={chooseKit.bind(null, index)} className="mt-auto">
         {selected ? (
@@ -86,12 +107,21 @@ function Proposal({ kit, name, index, selected }: { kit: BrandKit; name: string;
             ✓ Elegida
           </Button>
         ) : (
-          <SubmitButton pendingText="Eligiendo…" className="w-full">
+          <SubmitButton pendingText="Nuna está escribiendo tu marca…" className="w-full">
             Elegir esta
           </SubmitButton>
         )}
       </form>
     </article>
+  );
+}
+
+function BaseItem({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <h4 className="text-sm font-semibold uppercase tracking-wider text-muted">{title}</h4>
+      <div>{children}</div>
+    </div>
   );
 }
 
@@ -109,15 +139,19 @@ export default async function BrandPage(props: PageProps<"/onboarding/marca">) {
 
   const options = storedOptions(business.brand_options, business);
   const kit = storedKit(business.brand_kit, business);
+  const base = kit?.base;
   const purchased = business.brand_status === "purchased";
   const price = brandKitPrice();
+  const customColors = options
+    .map((o, i) => (o.colors ? { label: `Propuesta ${i + 1}: ${o.name}`.slice(0, 40), colors: o.colors } : null))
+    .filter((c): c is NonNullable<typeof c> => c !== null);
 
   return (
     <>
       <link rel="stylesheet" href={googleFontsHref(FONT_PAIRS)} precedence="default" />
       <PageTitle
         title="Tu marca, tus fotos y tu página actual"
-        lead="Nuna te propone una identidad de marca completa para tu negocio: logo, colores, tipo de letra y eslogan. Ver las propuestas es gratis."
+        lead="Nuna te propone una identidad de marca completa para tu negocio: logo, colores, letras, eslogan, historia y todo lo que necesitas para tus redes, tu papelería y tu local. Ver las propuestas es gratis."
       />
 
       <section id="kit" className="flex scroll-mt-4 flex-col gap-5" aria-labelledby="kit-title">
@@ -126,20 +160,18 @@ export default async function BrandPage(props: PageProps<"/onboarding/marca">) {
         </h2>
         {query.comprado && purchased && (
           <p role="status" className="rounded-2xl border border-lime/40 bg-lime/10 p-4 text-lime">
-            ¡Listo! Tu kit de marca es tuyo. Ya puedes descargarlo y ya quedó aplicado a tu página web.
+            ¡Listo! Tu kit de marca es tuyo. Ya puedes descargarlo todo y ya quedó aplicado a tu página web.
           </p>
         )}
 
         {options.length === 0 ? (
           <div className="flex flex-col gap-4 rounded-2xl border border-line bg-panel p-5">
             <p className="max-w-2xl text-muted">
-              Con lo que le contaste en la entrevista, Nuna diseña 3 propuestas distintas para {business.name}. Tú eliges
-              la que más te guste y la ajustas a tu gusto.
+              Con lo que le contaste en la entrevista, Nuna diseña 3 propuestas distintas para {business.name}, cada una con su
+              propia idea. Tú eliges la que más te guste y la ajustas a tu gusto.
             </p>
             <form action={generateKits}>
-              <SubmitButton pendingText="Nuna está diseñando tus propuestas… (unos segundos)">
-                Ver mis 3 propuestas de marca
-              </SubmitButton>
+              <SubmitButton pendingText="Nuna está diseñando tus propuestas… (unos segundos)">Ver mis 3 propuestas de marca</SubmitButton>
             </form>
           </div>
         ) : (
@@ -165,8 +197,49 @@ export default async function BrandPage(props: PageProps<"/onboarding/marca">) {
               kit={kit}
               name={business.name}
               palettes={palettesFor(business.industry)}
+              customColors={customColors}
               icons={iconsFor(business.industry)}
             />
+          </div>
+        )}
+
+        {kit && base && (
+          <div className="flex flex-col gap-5 rounded-2xl border border-line bg-panel p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="font-display text-xl font-bold">Tu base de marca</h3>
+              <form action={rewriteBase}>
+                <SubmitButton variant="ghost" pendingText="Nuna está escribiendo…">
+                  Escribir otra versión
+                </SubmitButton>
+              </form>
+            </div>
+            <div className="grid gap-5 md:grid-cols-2">
+              <BaseItem title="Historia">{base.story}</BaseItem>
+              <BaseItem title="Promesa">{base.promise}</BaseItem>
+              <BaseItem title="Misión">{base.mission}</BaseItem>
+              <BaseItem title="Visión">{base.vision}</BaseItem>
+              <BaseItem title="Valores">
+                <ul className="flex flex-col gap-1">
+                  {base.values.map((v) => (
+                    <li key={v.name}>
+                      <strong>{v.name}:</strong> {v.text}
+                    </li>
+                  ))}
+                </ul>
+              </BaseItem>
+              <BaseItem title="Cliente ideal">{base.audience}</BaseItem>
+              {purchased ? (
+                <>
+                  <BaseItem title="Bio para redes">{base.bio}</BaseItem>
+                  <BaseItem title="Bienvenida de WhatsApp">{base.whatsappWelcome}</BaseItem>
+                </>
+              ) : (
+                <p className="text-sm text-muted md:col-span-2">
+                  Con el kit completo también recibes la forma de hablar de tu marca, la bio para redes, la descripción para Google
+                  y WhatsApp, el mensaje de bienvenida, hashtags e ideas de publicaciones.
+                </p>
+              )}
+            </div>
           </div>
         )}
 
@@ -192,44 +265,55 @@ export default async function BrandPage(props: PageProps<"/onboarding/marca">) {
               <SubmitButton pendingText="Preparando tu kit…" className="self-start">
                 Comprar mi kit de marca · {price}
               </SubmitButton>
-              <p className="text-sm text-muted">
-                Modo prueba: no se cobra nada todavía. El cobro real se activa cuando conectemos los pagos.
-              </p>
+              <p className="text-sm text-muted">Modo prueba: no se cobra nada todavía. El cobro real se activa cuando conectemos los pagos.</p>
             </form>
           </div>
         )}
 
         {kit && purchased && (
-          <div className="flex flex-col gap-4 rounded-2xl border border-line bg-panel p-5">
+          <div className="flex flex-col gap-5 rounded-2xl border border-line bg-panel p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className="font-display text-xl font-bold">Tu kit de marca ✓</h3>
-              <Link
-                href="/manual-de-marca"
-                target="_blank"
-                className="inline-flex min-h-12 items-center rounded-full bg-lime px-6 font-semibold text-lime-ink"
-              >
-                Abrir manual de marca
-              </Link>
+              <div className="flex flex-wrap gap-2">
+                <a
+                  href={`/api/marca/${ZIP_NAME}`}
+                  className="inline-flex min-h-12 items-center rounded-full bg-lime px-6 font-semibold text-lime-ink"
+                >
+                  Descargar todo (.zip)
+                </a>
+                <Link href="/manual-de-marca" target="_blank" className="inline-flex min-h-12 items-center rounded-full border border-line px-6 font-semibold hover:bg-panel-2">
+                  Manual de marca
+                </Link>
+              </div>
             </div>
             <p className="text-sm text-muted">
-              Si cambias algo arriba, tus descargas, tu manual y tu página web se actualizan solos.
+              Si cambias algo arriba, tus descargas, tu manual y tu página web se actualizan solos. El PDF se abre y se edita en
+              Illustrator; el PSD trae capas para Photoshop.
             </p>
-            <ul className="grid gap-2 sm:grid-cols-2">
-              {DOWNLOADS.map((d) => (
-                <li key={d.file}>
-                  <a
-                    href={`/api/marca/${d.file}`}
-                    download={d.file}
-                    className="flex min-h-11 items-center justify-between gap-2 rounded-xl border border-line px-4 py-2 hover:bg-panel-2"
-                  >
-                    {d.label}
-                    <span aria-hidden className="text-muted">
-                      ↓
-                    </span>
-                  </a>
-                </li>
-              ))}
-            </ul>
+            {GROUPS.map((g) => (
+              <div key={g} className="flex flex-col gap-2">
+                <h4 className="font-semibold">{GROUP_LABEL[g]}</h4>
+                <ul className="flex flex-col divide-y divide-line rounded-xl border border-line">
+                  {ITEMS.filter((i) => i.group === g).map((item) => (
+                    <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
+                      <span>{item.label}</span>
+                      <span className="flex flex-wrap gap-1.5">
+                        {item.formats.map((fmt) => (
+                          <a
+                            key={fmt}
+                            href={`/api/marca/${item.id}.${fmt}`}
+                            download
+                            className="inline-flex min-h-10 items-center rounded-full border border-line px-3 text-sm hover:bg-panel-2"
+                          >
+                            {FORMAT_LABEL[fmt]}
+                          </a>
+                        ))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         )}
       </section>

@@ -1,10 +1,39 @@
 import "server-only";
 import { z } from "zod";
-import { FONT_PAIRS, iconsFor, palettesFor, rulesKits, sanitizeKit, type BrandKit } from "@/lib/brand";
+import {
+  FONT_PAIRS,
+  LAYOUTS,
+  PATTERNS,
+  SHAPES,
+  captionFor,
+  iconsFor,
+  rulesBase,
+  rulesKits,
+  sanitizeKit,
+  type BrandBase,
+  type BrandKit,
+} from "@/lib/brand";
 import type { Tables } from "@/lib/database.types";
 import { marketContext, marketFor } from "@/lib/markets";
 import { aiJson } from "@/lib/nuna";
 
+type Business = Tables<"businesses">;
+
+const formOf = (b: Business) => ({ tu: "tú", usted: "usted", vos: "vos" })[b.address_form ?? "tu"] ?? "tú";
+
+function businessBrief(b: Business, services: { name: string }[]) {
+  return [
+    `Negocio: ${b.name}. Giro: ${b.industry ?? "sin dato"}. Tipo: ${b.business_type ?? "sin dato"}. Dueño: ${b.owner_name ?? "sin dato"}.`,
+    `Zona: ${b.zone ?? ""}. ${marketContext(marketFor(b.country_code))}`,
+    `Lo que ofrece: ${services.map((s) => s.name).join(", ") || "sin dato"}.`,
+    `Entregas a domicilio: ${b.offers_delivery ? "sí" : "no"}. Formas de pago: ${b.payment_methods.join(", ") || "sin dato"}.`,
+    `Cómo le llegan clientes: ${b.lead_sources ?? "sin dato"}. Horario: ${b.hours ?? "sin dato"}.`,
+  ].join("\n");
+}
+
+// ---------- 3 propuestas creativas ----------
+
+const Hex = z.string();
 const KitSchema = z.object({
   name: z.string(),
   concept: z.string(),
@@ -12,51 +41,111 @@ const KitSchema = z.object({
   personality: z.array(z.string()),
   tone: z.string(),
   slogan: z.string(),
-  palette: z.string(),
+  caption: z.string(),
+  colors: z.object({ primary: Hex, secondary: Hex, accent: Hex, dark: Hex, light: Hex }).partial(),
   fonts: z.string(),
   icon: z.string(),
-  shape: z.enum(["circle", "rounded", "hexagon", "none"]),
+  shape: z.string(),
   monogram: z.boolean(),
-});
+  layout: z.string(),
+  nameStyle: z.string(),
+  pattern: z.string(),
+}).partial(); // lo que falte o venga mal lo completa sanitizeKit
 const KitsSchema = z.object({ kits: z.array(KitSchema) });
 
-// Nuna propone 3 kits de marca distintos. Elige solo entre las piezas curadas
-// (paletas, tipografías, íconos); el texto (propuesta, tono, eslogan) lo escribe a la medida.
-export async function proposeKits(b: Tables<"businesses">, services: { name: string }[]): Promise<BrandKit[]> {
+export async function proposeKits(b: Business, services: { name: string }[]): Promise<BrandKit[]> {
   const fallback = rulesKits(b);
-  const palettes = palettesFor(b.industry).slice(0, 8);
-  const icons = iconsFor(b.industry).slice(0, 10);
-  const form = { tu: "tú", usted: "usted", vos: "vos" }[b.address_form ?? "tu"] ?? "tú";
+  const icons = iconsFor(b.industry).slice(0, 18);
 
   const out = await aiJson({
     system:
-      "Eres Nuna, diseñadora de marcas de Orbusiness para negocios pequeños de Latinoamérica y EE.UU. " +
-      "Propón 3 identidades de marca claramente distintas entre sí (por ejemplo: una fuerte, una moderna y una cercana) " +
-      "que le gusten al dueño y a sus clientes locales. Escribe en español natural del país del negocio. " +
-      `El eslogan va dirigido a los clientes y usa el trato de ${form}; máximo 7 palabras, sin comillas. ` +
-      "Elige paleta, tipografías e ícono SOLO de las listas dadas (usa los id exactos). " +
-      "monogram=true significa usar las iniciales del negocio en vez del ícono.",
+      "Eres Nuna, directora creativa de Orbusiness. Diseñas identidades de marca para negocios pequeños de Latinoamérica y EE.UU. " +
+      "Propón 3 identidades MUY distintas entre sí, cada una con una idea creativa propia (no solo 'moderna', 'clásica', 'cercana'): " +
+      "juega con el nombre, la historia del barrio, el oficio, la cultura y las palabras del país. Evita lo genérico " +
+      "('calidad y buen servicio', 'los mejores precios', 'tu mejor opción'). " +
+      "El eslogan es corto (máximo 7 palabras), memorable, con ritmo; puede tener rima o juego de palabras; va dirigido a los clientes " +
+      `con el trato de ${formOf(b)}; sin comillas. Escribe en el español natural del país. ` +
+      "Inventa una paleta original para cada propuesta (5 colores HEX): primary (el color de la marca, debe ser intenso u oscuro para que el texto blanco se lea encima), " +
+      "secondary, accent (contraste vivo), dark (casi negro, con un toque del color) y light (fondo muy claro, casi blanco). " +
+      "Las 3 paletas deben ser claramente distintas. " +
+      "Combina estilo de logo, forma, letra, estilo del nombre y patrón para que cada propuesta se sienta única. " +
+      "Usa SOLO los id de las listas para letra, ícono, forma, estilo de logo y patrón. " +
+      "monogram=true usa las iniciales del negocio en vez del ícono. caption es el texto pequeño del logo (por ejemplo 'Ferretería · Managua'), máximo 30 letras; no inventes años ni datos.",
     user: [
-      `Negocio: ${b.name}. Giro: ${b.industry ?? "sin dato"}. Tipo: ${b.business_type ?? "sin dato"}.`,
-      `Zona: ${b.zone ?? ""}. ${marketContext(marketFor(b.country_code))}`,
-      `Lo que ofrece: ${services.map((s) => s.name).join(", ") || "sin dato"}.`,
-      `Entregas a domicilio: ${b.offers_delivery ? "sí" : "no"}. Formas de pago: ${b.payment_methods.join(", ") || "sin dato"}.`,
-      `Cómo le llegan clientes: ${b.lead_sources ?? "sin dato"}.`,
+      businessBrief(b, services),
       "",
-      `Paletas (id: nombre): ${palettes.map((p) => `${p.id}: ${p.name}`).join("; ")}.`,
-      `Tipografías (id: estilo): ${FONT_PAIRS.map((f) => `${f.id}: ${f.mood}`).join("; ")}.`,
+      `Letras (id: estilo): ${FONT_PAIRS.map((f) => `${f.id}: ${f.mood}`).join("; ")}.`,
       `Íconos (id): ${icons.join(", ")}.`,
-      "Formas del isotipo: circle, rounded, hexagon, none.",
+      `Formas: ${SHAPES.map((s) => `${s.id} (${s.label})`).join(", ")}.`,
+      `Estilos de logo: ${LAYOUTS.map((l) => `${l.id} (${l.note})`).join(", ")}.`,
+      `Estilos del nombre: normal, mayusculas, dos-tonos (la segunda parte del nombre en el color de la marca).`,
+      `Patrones: ${PATTERNS.map((p) => `${p.id} (${p.label})`).join(", ")}.`,
     ].join("\n"),
     schema: KitsSchema,
     jsonHint:
-      'Formato: {"kits": [{"name": "nombre corto de la propuesta", "concept": "por qué funciona (1-2 oraciones)", ' +
-      '"proposition": "propuesta de valor (1 oración)", "personality": ["3 adjetivos"], "tone": "tono de voz (1 oración)", ' +
-      '"slogan": "eslogan", "palette": "id", "fonts": "id", "icon": "id", "shape": "circle", "monogram": false}, ...] } con exactamente 3 kits.',
+      'Formato: {"kits": [{"name": "nombre corto y creativo de la propuesta", "concept": "la idea creativa y por qué le funciona a este negocio (2 oraciones)", ' +
+      '"proposition": "propuesta de valor (1 oración)", "personality": ["3 adjetivos"], "tone": "tono de voz (1 oración)", "slogan": "eslogan", ' +
+      '"caption": "Giro · Zona", "colors": {"primary": "#1F3A5F", "secondary": "#F2A900", "accent": "#E4572E", "dark": "#14202E", "light": "#F5F3EE"}, ' +
+      '"fonts": "id", "icon": "id", "shape": "id", "monogram": false, "layout": "id", "nameStyle": "id", "pattern": "id"}, ...]} con exactamente 3 kits.',
+    maxTokens: 3000,
+    temperature: 1.1,
   });
 
-  if (!out?.kits?.length) return fallback;
-  const kits = out.kits.slice(0, 3).map((k, i) => sanitizeKit(k, fallback[i] ?? fallback[0]));
+  // Los valores se aceptan como texto y sanitizeKit deja solo los válidos.
+  const parsed = out?.kits ?? [];
+  if (!parsed.length) return fallback;
+  const caption = captionFor(b);
+  const kits = parsed.slice(0, 3).map((k, i) => sanitizeKit({ ...k, caption: k.caption || caption } as Partial<BrandKit>, fallback[i] ?? fallback[0]));
   while (kits.length < 3) kits.push(fallback[kits.length]);
   return kits;
+}
+
+// ---------- Base de marca completa (para la propuesta elegida) ----------
+
+const BaseSchema = z.object({
+  story: z.string(),
+  mission: z.string(),
+  vision: z.string(),
+  values: z.array(z.object({ name: z.string(), text: z.string().optional() })),
+  audience: z.string(),
+  promise: z.string(),
+  messages: z.array(z.string()),
+  voiceDo: z.array(z.string()),
+  voiceDont: z.array(z.string()),
+  bio: z.string(),
+  description: z.string(),
+  whatsappWelcome: z.string(),
+  hashtags: z.array(z.string()),
+  postIdeas: z.array(z.string()),
+  photoStyle: z.string(),
+}).partial();
+
+export async function writeBase(b: Business, services: { name: string }[], kit: BrandKit): Promise<BrandBase> {
+  const fallback = rulesBase(b, kit);
+  const out = await aiJson({
+    system:
+      "Eres Nuna, estratega de marca de Orbusiness. Escribe la base de marca completa de un negocio pequeño, a partir de la identidad que el dueño eligió. " +
+      "Español natural del país, sencillo, cálido y concreto (nada de palabras rebuscadas de agencia). " +
+      `Los textos para clientes (bio, descripción, bienvenida de WhatsApp, mensajes) usan el trato de ${formOf(b)}. ` +
+      "No inventes datos que no conoces (años de fundación, premios, cantidades, nombres de empleados); la historia puede hablar del propósito y del barrio sin fechas. " +
+      "voiceDo son frases de ejemplo que sí diría el negocio; voiceDont son cosas que nunca diría o haría al hablar con clientes. " +
+      "bio: máximo 150 caracteres. hashtags: 5 a 8, sin espacios. postIdeas: 5 ideas concretas de publicaciones para redes. " +
+      "photoStyle: cómo deben ser sus fotos (luz, encuadre, qué mostrar).",
+    user: [
+      businessBrief(b, services),
+      "",
+      `Identidad elegida: "${kit.name}". Idea: ${kit.concept}`,
+      `Propuesta de valor: ${kit.proposition}. Personalidad: ${kit.personality.join(", ")}. Tono: ${kit.tone}. Eslogan: ${kit.slogan}.`,
+    ].join("\n"),
+    schema: BaseSchema,
+    jsonHint:
+      'Formato: {"story": "historia de la marca (3-4 oraciones)", "mission": "1 oración", "vision": "1 oración", ' +
+      '"values": [{"name": "Valor", "text": "qué significa en la práctica"}], "audience": "cliente ideal (2 oraciones)", "promise": "promesa de marca (1 oración)", ' +
+      '"messages": ["3 mensajes clave"], "voiceDo": ["3 frases"], "voiceDont": ["3 cosas"], "bio": "...", "description": "descripción para Google y WhatsApp Business (2-3 oraciones)", ' +
+      '"whatsappWelcome": "mensaje de bienvenida", "hashtags": ["#..."], "postIdeas": ["..."], "photoStyle": "..."} — values: 3 o 4.',
+    maxTokens: 2500,
+    temperature: 0.9,
+  });
+  if (!out) return fallback;
+  return sanitizeKit({ ...kit, base: out as BrandBase }, { ...kit, base: fallback }).base ?? fallback;
 }

@@ -258,6 +258,7 @@ export async function aiJson<T>(opts: {
   schema: z.ZodType<T>;
   jsonHint: string; // descripción de las claves y un ejemplo, para DeepSeek
   maxTokens?: number;
+  temperature?: number; // solo DeepSeek (más alto = más creativo)
 }): Promise<T | null> {
   const provider = nunaProvider();
   if (provider === "rules") return null;
@@ -280,13 +281,14 @@ export async function aiJson<T>(opts: {
         body: JSON.stringify({
           model: process.env.DEEPSEEK_MODEL || "deepseek-flash",
           max_tokens: opts.maxTokens ?? 4000,
+          ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: `${opts.system}\n\nResponde solo con un objeto json. ${opts.jsonHint}` },
             { role: "user", content: opts.user },
           ],
         }),
-        signal: AbortSignal.timeout(60_000),
+        signal: AbortSignal.timeout(90_000),
       });
       if (!response.ok) throw new Error(`DeepSeek respondió ${response.status}: ${await response.text()}`);
       const data = (await response.json()) as { choices?: { message?: { content?: string | null } }[] };
@@ -294,6 +296,7 @@ export async function aiJson<T>(opts: {
       if (!content) continue;
       const parsed = opts.schema.safeParse(JSON.parse(content));
       if (parsed.success) return parsed.data;
+      console.error("Nuna (deepseek): la respuesta no tiene el formato esperado:", parsed.error.issues.slice(0, 3));
     }
     return null;
   } catch (error) {

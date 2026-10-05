@@ -1,23 +1,37 @@
 import "server-only";
-import { ImageResponse } from "next/og";
-import { parse } from "opentype.js";
-import { createElement } from "react";
-import { fontsById, initials, isotypeSvg, onColor, paletteById, type BrandKit } from "@/lib/brand";
+import { parse, type Font } from "opentype.js";
+import {
+  fontsById,
+  initials,
+  isotypeSvg,
+  kitPalette,
+  logoName,
+  markScale,
+  markSvg,
+  onColor,
+  splitName,
+  type BrandKit,
+} from "@/lib/brand";
+
+// Motor de dibujo del kit de marca: todo se arma como SVG con el texto convertido a trazos,
+// para que los archivos no dependan de tener la tipografía instalada (imprenta, Illustrator, etc.).
+
+// ---------- Tipografías ----------
 
 // Descarga (y guarda en memoria) la tipografía TTF de Google Fonts.
-const fontCache = new Map<string, Promise<ArrayBuffer>>();
-export function loadFont(family: string, weight: number): Promise<ArrayBuffer> {
+const fontCache = new Map<string, Promise<Font>>();
+export function loadFont(family: string, weight: number): Promise<Font> {
   const key = `${family}:${weight}`;
   if (!fontCache.has(key)) {
     fontCache.set(
       key,
       (async () => {
         const url = `https://fonts.googleapis.com/css2?family=${family.replace(/ /g, "+")}:wght@${weight}`;
-        // Con este User-Agent, Google entrega TTF (lo que necesitan opentype y ImageResponse).
+        // Con este User-Agent, Google entrega TTF (lo que necesita opentype).
         const css = await (await fetch(url, { headers: { "User-Agent": "Mozilla/4.0" } })).text();
         const src = css.match(/src: url\((.+?)\) format\('(?:truetype|opentype)'\)/)?.[1];
         if (!src) throw new Error(`No se encontró la tipografía ${family} ${weight}`);
-        return (await fetch(src)).arrayBuffer();
+        return parse(await (await fetch(src)).arrayBuffer());
       })().catch((error) => {
         fontCache.delete(key);
         throw error;
@@ -27,87 +41,366 @@ export function loadFont(family: string, weight: number): Promise<ArrayBuffer> {
   return fontCache.get(key)!;
 }
 
-export async function kitFonts(kit: BrandKit) {
+export type KitFonts = { heading: Font; body: Font };
+
+export async function kitFonts(kit: BrandKit): Promise<KitFonts> {
   const pair = fontsById(kit.fonts);
   const [heading, body] = await Promise.all([
     loadFont(pair.heading.family, pair.heading.weight),
     loadFont(pair.body.family, pair.body.weight),
   ]);
-  return { pair, heading, body };
+  return { heading, body };
 }
 
-// Texto convertido a trazos (path) para que el SVG no dependa de tener la tipografía instalada.
-function textPath(fontData: ArrayBuffer, text: string, x: number, baseline: number, size: number) {
-  const font = parse(fontData);
-  const width = font.getAdvanceWidth(text, size);
-  return { d: font.getPath(text, x, baseline, size).toPathData(2), width, font };
+// ---------- Texto en trazos ----------
+
+export const capRatio = (font: Font) =>
+  ((font.tables.os2 as { sCapHeight?: number } | undefined)?.sCapHeight || font.unitsPerEm * 0.7) / font.unitsPerEm;
+
+// Las letras se colocan una por una (sin las sustituciones avanzadas de la fuente, que algunas
+// tipografías traen en formatos que opentype no soporta). tracking: espacio extra entre letras,
+// en proporción del tamaño (0.1 = 10 %).
+type Glyph = ReturnType<Font["charToGlyph"]>;
+const glyphsOf = (font: Font, text: string) => Array.from(text).map((c) => font.charToGlyph(c));
+function kern(font: Font, a: Glyph, b: Glyph) {
+  try {
+    const v = Number(font.getKerningValue(a, b));
+    return Number.isFinite(v) ? v : 0;
+  } catch {
+    return 0;
+  }
 }
 
-function monogramPath(fontData: ArrayBuffer, name: string, box: number) {
-  const font = parse(fontData);
+function layout(font: Font, text: string, size: number, tracking: number, draw?: (g: Glyph, x: number) => void) {
+  const gs = glyphsOf(font, text);
+  const k = size / font.unitsPerEm;
+  let x = 0;
+  gs.forEach((g, i) => {
+    draw?.(g, x);
+    x += (Number.isFinite(g.advanceWidth) ? g.advanceWidth! : 0) * k;
+    if (i < gs.length - 1) x += kern(font, g, gs[i + 1]) * k + tracking * size;
+  });
+  return x;
+}
+
+export const measure = (font: Font, text: string, size: number, tracking = 0) => layout(font, text, size, tracking);
+
+// Trazo SVG de un glifo (se arma a mano: toPathData de opentype a veces escribe "NaN").
+type PathCmd = { type: string; x?: number; y?: number; x1?: number; y1?: number; x2?: number; y2?: number };
+const n = (v: number | undefined) => (Number.isFinite(v) ? Number(v!.toFixed(2)) : 0);
+function pathData(commands: PathCmd[]) {
+  let d = "";
+  for (const c of commands) {
+    if (c.type === "M" || c.type === "L") d += `${c.type}${n(c.x)} ${n(c.y)}`;
+    else if (c.type === "Q") d += `Q${n(c.x1)} ${n(c.y1)} ${n(c.x)} ${n(c.y)}`;
+    else if (c.type === "C") d += `C${n(c.x1)} ${n(c.y1)} ${n(c.x2)} ${n(c.y2)} ${n(c.x)} ${n(c.y)}`;
+    else if (c.type === "Z") d += "Z";
+  }
+  return d;
+}
+const glyphPath = (g: Glyph, x: number, baseline: number, size: number) => pathData(g.getPath(x, baseline, size).commands as PathCmd[]);
+
+function textPath(font: Font, text: string, x: number, baseline: number, size: number, tracking = 0) {
+  let d = "";
+  layout(font, text, size, tracking, (g, gx) => {
+    d += glyphPath(g, x + gx, baseline, size);
+  });
+  return d;
+}
+
+const charPath = (font: Font, c: string, x: number, baseline: number, size: number) => glyphPath(font.charToGlyph(c), x, baseline, size);
+
+// Texto alineado en trazos.
+export function textSvg(
+  font: Font,
+  text: string,
+  x: number,
+  baseline: number,
+  size: number,
+  fill: string,
+  opts: { anchor?: "start" | "middle" | "end"; tracking?: number; opacity?: number } = {},
+) {
+  if (!text) return "";
+  const w = measure(font, text, size, opts.tracking);
+  const left = opts.anchor === "middle" ? x - w / 2 : opts.anchor === "end" ? x - w : x;
+  const d = textPath(font, text, left, baseline, size, opts.tracking);
+  return d ? `<path d="${d}" fill="${fill}"${opts.opacity != null ? ` fill-opacity="${opts.opacity}"` : ""}/>` : "";
+}
+
+// Parte el texto en líneas que caben en maxWidth.
+export function wrap(font: Font, text: string, size: number, maxWidth: number) {
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && measure(font, next, size) > maxWidth) {
+      lines.push(line);
+      line = word;
+    } else line = next;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+// Párrafo: achica la letra hasta que quepa en maxLines.
+export function paragraphSvg(
+  font: Font,
+  text: string,
+  x: number,
+  top: number,
+  maxWidth: number,
+  size: number,
+  fill: string,
+  opts: { anchor?: "start" | "middle" | "end"; lineHeight?: number; maxLines?: number; minSize?: number } = {},
+) {
+  let s = size;
+  let lines = wrap(font, text, s, maxWidth);
+  while ((lines.length > (opts.maxLines ?? 4) || lines.some((l) => measure(font, l, s) > maxWidth)) && s > (opts.minSize ?? size * 0.5)) {
+    s *= 0.92;
+    lines = wrap(font, text, s, maxWidth);
+  }
+  const lh = s * (opts.lineHeight ?? 1.15);
+  const cap = capRatio(font) * s;
+  const svg = lines.map((l, i) => textSvg(font, l, x, top + cap + i * lh, s, fill, { anchor: opts.anchor })).join("");
+  return { svg, height: cap + (lines.length - 1) * lh, size: s, lines: lines.length };
+}
+
+// Texto curvo (para el emblema). Arriba se lee por fuera del círculo; abajo, por dentro.
+function arcText(font: Font, text: string, cx: number, cy: number, r: number, size: number, position: "top" | "bottom", tracking: number) {
+  const chars = Array.from(text);
+  const adv = chars.map((c) => measure(font, c, size));
+  const total = adv.reduce((a, b) => a + b, 0) + tracking * size * (chars.length - 1);
+  const span = total / r;
+  let acc = 0;
+  let out = "";
+  chars.forEach((c, i) => {
+    const mid = acc + adv[i] / 2;
+    acc += adv[i] + tracking * size;
+    const phi = position === "top" ? -Math.PI / 2 - span / 2 + mid / r : Math.PI / 2 + span / 2 - mid / r;
+    const px = cx + r * Math.cos(phi);
+    const py = cy + r * Math.sin(phi);
+    const rot = ((position === "top" ? phi + Math.PI / 2 : phi - Math.PI / 2) * 180) / Math.PI;
+    const d = charPath(font, c, -adv[i] / 2, 0, size);
+    if (d) out += `<path transform="translate(${px.toFixed(2)} ${py.toFixed(2)}) rotate(${rot.toFixed(2)})" d="${d}"/>`;
+  });
+  return out;
+}
+
+// Tamaño de letra para que un texto curvo ocupe como máximo `share` de media circunferencia.
+function arcSize(font: Font, text: string, r: number, max: number, share: number, tracking: number) {
+  const width = measure(font, text, 100, tracking);
+  return Math.min(max, (Math.PI * r * share * 100) / Math.max(width, 1));
+}
+
+// Iniciales centradas en un cuadro (trazos).
+function monogramPath(font: Font, name: string, box: number, scale: number) {
   const text = initials(name);
-  const size = box * 0.42;
-  const width = font.getAdvanceWidth(text, size);
-  const capHeight = ((font.tables.os2 as { sCapHeight?: number })?.sCapHeight ?? font.unitsPerEm * 0.7) / font.unitsPerEm;
-  return font.getPath(text, (box - width) / 2, box / 2 + (capHeight * size) / 2, size).toPathData(2);
+  const size = box * 0.75 * scale;
+  const width = measure(font, text, size);
+  return textPath(font, text, (box - width) / 2, box / 2 + (capRatio(font) * size) / 2, size);
 }
 
-export type LogoLayout = "horizontal" | "vertical" | "isotipo";
+// ---------- Piezas (arte con capas, para SVG, PNG, JPG, PDF y PSD) ----------
+
+export type Layer = { name: string; svg: string };
+export type Art = { width: number; height: number; layers: Layer[] };
+
+export const artSvg = (art: Art, scale = 1) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${art.width} ${art.height}" width="${art.width * scale}" height="${art.height * scale}">${art.layers
+    .map((l) => `<g>${l.svg}</g>`)
+    .join("")}</svg>`;
+
+// Coloca un arte dentro de un cuadro (x, y, maxW, maxH). Devuelve el SVG y dónde quedó.
+export function place(art: Art, x: number, y: number, maxW: number, maxH: number, align: "center" | "start" | "end" = "center") {
+  const k = Math.min(maxW / art.width, maxH / art.height);
+  const w = art.width * k;
+  const h = art.height * k;
+  const ox = align === "center" ? x + (maxW - w) / 2 : align === "end" ? x + maxW - w : x;
+  const oy = y + (maxH - h) / 2;
+  return {
+    svg: `<g transform="translate(${ox.toFixed(2)} ${oy.toFixed(2)}) scale(${k.toFixed(5)})">${art.layers.map((l) => l.svg).join("")}</g>`,
+    w,
+    h,
+    x: ox,
+    y: oy,
+  };
+}
+
+// ---------- Logo ----------
+
+export type LogoVariant = "principal" | "vertical" | "isotipo" | "sello";
 export type LogoTheme = "color" | "blanco" | "mono";
 
-// SVG del logo listo para descargar (texto en trazos, fondo transparente).
-export async function logoSvg(kit: BrandKit, name: string, layout: LogoLayout, theme: LogoTheme = "color") {
-  const { heading } = await kitFonts(kit);
-  const p = paletteById(kit.palette);
-  const isoSize = 120;
-  const mono = theme === "mono" ? p.dark : theme === "blanco" ? "#FFFFFF" : undefined;
-  const mPath = kit.monogram ? monogramPath(heading, name, isoSize) : undefined;
-  const isoKit = theme === "blanco" ? { ...kit, shape: "none" as const } : kit;
-  const iso = isotypeSvg(isoKit, { size: isoSize, mono, monogramPath: mPath })
-    .replace(/^<svg[^>]*>/, "")
-    .replace(/<\/svg>$/, "");
-  const textColor = theme === "blanco" ? "#FFFFFF" : p.dark;
-
-  if (layout === "isotipo") {
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${isoSize} ${isoSize}" width="${isoSize * 4}" height="${isoSize * 4}">${iso}</svg>`;
-  }
-  if (layout === "horizontal") {
-    const size = 62;
-    const gap = 30;
-    const text = textPath(heading, name, isoSize + gap, isoSize / 2 + size * 0.36, size);
-    const w = Math.ceil(isoSize + gap + text.width + 8);
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${isoSize}" width="${w * 2}" height="${isoSize * 2}"><g>${iso}</g><path d="${text.d}" fill="${textColor}"/></svg>`;
-  }
-  const size = 54;
-  const gap = 26;
-  const textProbe = textPath(heading, name, 0, 0, size);
-  const w = Math.ceil(Math.max(isoSize, textProbe.width) + 16);
-  const text = textPath(heading, name, (w - textProbe.width) / 2, isoSize + gap + size * 0.8, size);
-  const h = Math.ceil(isoSize + gap + size * 1.05);
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w * 2}" height="${h * 2}"><g transform="translate(${(w - isoSize) / 2} 0)">${iso}</g><path d="${text.d}" fill="${textColor}"/></svg>`;
+function inkFor(kit: BrandKit, theme: LogoTheme) {
+  const p = kitPalette(kit);
+  if (theme === "blanco") return { name: "#FFFFFF", accent: "#FFFFFF", caption: "#FFFFFF", mono: "#FFFFFF" };
+  if (theme === "mono") return { name: p.dark, accent: p.dark, caption: p.dark, mono: p.dark };
+  return { name: p.dark, accent: p.primary, caption: p.primary, mono: undefined };
 }
 
-// Isotipo para fondos de color (perfil, portada): solo el símbolo, en el color legible sobre el fondo.
-export async function isotypeOnColor(kit: BrandKit, name: string, bg: string, size = 240) {
-  const { heading } = await kitFonts(kit);
-  const p = paletteById(kit.palette);
-  const ink = onColor(bg, p.dark);
-  const mPath = kit.monogram ? monogramPath(heading, name, size) : undefined;
-  return isotypeSvg({ ...kit, shape: "none" }, { size, mono: ink, monogramPath: mPath });
+function isoLayer(kit: BrandKit, name: string, fonts: KitFonts, size: number, theme: LogoTheme) {
+  const mPath = kit.monogram ? monogramPath(fonts.heading, name, size, markScale(kit.shape)) : undefined;
+  return isotypeSvg(kit, { size, mono: inkFor(kit, theme).mono, monogramPath: mPath })
+    .replace(/^<svg[^>]*>/, "")
+    .replace(/<\/svg>$/, "");
+}
+
+// Nombre en una línea (a dos colores si el kit lo pide).
+function nameRun(kit: BrandKit, fonts: KitFonts, text: string, x: number, baseline: number, size: number, theme: LogoTheme, anchor: "start" | "middle" = "start") {
+  const ink = inkFor(kit, theme);
+  const tracking = kit.nameStyle === "mayusculas" ? 0.04 : 0;
+  const width = measure(fonts.heading, text, size, tracking);
+  const left = anchor === "middle" ? x - width / 2 : x;
+  if (kit.nameStyle === "dos-tonos" && theme === "color") {
+    const [a, b] = splitName(text);
+    if (b) {
+      const wa = measure(fonts.heading, `${a} `, size, tracking);
+      return {
+        svg: textSvg(fonts.heading, a, left, baseline, size, ink.name, { tracking }) + textSvg(fonts.heading, b, left + wa, baseline, size, ink.accent, { tracking }),
+        width,
+      };
+    }
+  }
+  return { svg: textSvg(fonts.heading, text, left, baseline, size, ink.name, { tracking }), width };
+}
+
+function emblem(kit: BrandKit, name: string, fonts: KitFonts, theme: LogoTheme): Art {
+  const p = kitPalette(kit);
+  const S = 240;
+  const c = S / 2;
+  const filled = theme !== "blanco";
+  const bg = theme === "mono" ? p.dark : p.primary;
+  const ink = filled ? onColor(bg, p.dark) : "#FFFFFF";
+  const script = fontsById(kit.fonts).script;
+  const top = script ? name : name.toLocaleUpperCase("es");
+  const topTracking = script ? 0 : 0.08;
+  const topSize = arcSize(fonts.heading, top, 92, 30, 0.86, topTracking);
+  const bottom = (kit.caption || "").toLocaleUpperCase("es");
+  const bottomSize = bottom ? arcSize(fonts.body, bottom, 103, 15, 0.62, 0.14) : 0;
+  const ring = filled
+    ? `<circle cx="${c}" cy="${c}" r="${c}" fill="${bg}"/>`
+    : `<circle cx="${c}" cy="${c}" r="${c - 3}" fill="none" stroke="#FFFFFF" stroke-width="6"/>`;
+  const inner = `<circle cx="${c}" cy="${c}" r="76" fill="none" stroke="${ink}" stroke-width="2.5" stroke-opacity="0.6"/>`;
+  const dots = `<circle cx="${c - 103}" cy="${c}" r="4" fill="${ink}"/><circle cx="${c + 103}" cy="${c}" r="4" fill="${ink}"/>`;
+  const markSize = 96;
+  const scale = kit.monogram ? 0.62 : 0.78;
+  const mPath = kit.monogram ? monogramPath(fonts.heading, name, markSize, scale) : undefined;
+  const mark = `<g transform="translate(${c - markSize / 2} ${c - markSize / 2})">${markSvg(kit, markSize, ink, { monogramPath: mPath, scale })}</g>`;
+  return {
+    width: S,
+    height: S,
+    layers: [
+      { name: "Sello", svg: ring + inner + dots },
+      { name: "Símbolo", svg: mark },
+      {
+        name: "Nombre",
+        svg: `<g fill="${ink}">${arcText(fonts.heading, top, c, c, 92, topSize, "top", topTracking)}${
+          bottom ? arcText(fonts.body, bottom, c, c, 103 + bottomSize * 0.72, bottomSize, "bottom", 0.14) : ""
+        }</g>`,
+      },
+    ],
+  };
+}
+
+export async function logoArt(kit: BrandKit, name: string, variant: LogoVariant = "principal", theme: LogoTheme = "color", fonts?: KitFonts): Promise<Art> {
+  fonts ??= await kitFonts(kit);
+  const text = logoName(kit, name);
+  const ink = inkFor(kit, theme);
+  const cap = capRatio(fonts.heading);
+  const capB = capRatio(fonts.body);
+  const caption = kit.caption.toLocaleUpperCase("es");
+  const captionSvg = (x: number, baseline: number, size: number, anchor: "start" | "middle") =>
+    caption ? textSvg(fonts.body, caption, x, baseline, size, ink.caption, { anchor, tracking: 0.16 }) : "";
+
+  if (variant === "sello") return emblem(kit, name, fonts, theme === "color" ? "mono" : theme);
+  if (variant === "isotipo") return { width: 120, height: 120, layers: [{ name: "Símbolo", svg: isoLayer(kit, name, fonts, 120, theme) }] };
+  if (variant === "principal" && kit.layout === "emblema") return emblem(kit, name, fonts, theme);
+
+  if (variant === "vertical") {
+    const iso = 120;
+    const size = 54;
+    const run = nameRun(kit, fonts, text, 0, 0, size, theme);
+    const capW = caption ? measure(fonts.body, caption, 16, 0.16) : 0;
+    const w = Math.ceil(Math.max(iso, run.width, capW) + 16);
+    const nameBase = iso + 28 + cap * size;
+    const h = Math.ceil(nameBase + (caption ? 34 : 10));
+    return {
+      width: w,
+      height: h,
+      layers: [
+        { name: "Símbolo", svg: `<g transform="translate(${(w - iso) / 2} 0)">${isoLayer(kit, name, fonts, iso, theme)}</g>` },
+        { name: "Nombre", svg: nameRun(kit, fonts, text, w / 2, nameBase, size, theme, "middle").svg },
+        ...(caption ? [{ name: "Texto pequeño", svg: captionSvg(w / 2, nameBase + 30, 16, "middle") }] : []),
+      ],
+    };
+  }
+
+  if (kit.layout === "palabra") {
+    const size = 96;
+    const run = nameRun(kit, fonts, text, 0, cap * size, size, theme);
+    const p = kitPalette(kit);
+    const r = size * 0.085;
+    const dot = `<circle cx="${run.width + r * 2.2}" cy="${cap * size - r}" r="${r}" fill="${theme === "color" ? p.accent : ink.name}"/>`;
+    const w = Math.ceil(run.width + r * 3.6);
+    const captionBase = cap * size + 22 + capB * 20;
+    const h = Math.ceil(caption ? captionBase + 6 : cap * size + 8);
+    return {
+      width: w,
+      height: h,
+      layers: [
+        { name: "Nombre", svg: run.svg },
+        { name: "Detalle", svg: dot },
+        ...(caption ? [{ name: "Texto pequeño", svg: captionSvg(2, captionBase, 20, "start") }] : []),
+      ],
+    };
+  }
+
+  if (kit.layout === "apilado") {
+    const iso = 120;
+    const size = 50;
+    const [l1, l2] = splitName(text);
+    const lh = size * 1.02;
+    const lines = l2 ? [l1, l2] : [l1];
+    const blockH = cap * size + (lines.length - 1) * lh + (caption ? 14 + capB * 15 : 0);
+    const h = Math.max(iso, Math.ceil(blockH + 4));
+    const top = (h - blockH) / 2;
+    const p = kitPalette(kit);
+    const two = kit.nameStyle === "dos-tonos" && theme === "color";
+    const tracking = kit.nameStyle === "mayusculas" ? 0.04 : 0;
+    const x = iso + 28;
+    const nameSvg = lines
+      .map((l, i) => textSvg(fonts.heading, l, x, top + cap * size + i * lh, size, two && i === 1 ? p.primary : ink.name, { tracking }))
+      .join("");
+    const widths = lines.map((l) => measure(fonts.heading, l, size, tracking));
+    const capW = caption ? measure(fonts.body, caption, 15, 0.16) : 0;
+    return {
+      width: Math.ceil(x + Math.max(...widths, capW) + 6),
+      height: h,
+      layers: [
+        { name: "Símbolo", svg: `<g transform="translate(0 ${(h - iso) / 2})">${isoLayer(kit, name, fonts, iso, theme)}</g>` },
+        { name: "Nombre", svg: nameSvg },
+        ...(caption ? [{ name: "Texto pequeño", svg: captionSvg(x + 2, top + cap * size + (lines.length - 1) * lh + 14 + capB * 15, 15, "start") }] : []),
+      ],
+    };
+  }
+
+  // Clásico.
+  const iso = 120;
+  const size = kit.nameStyle === "mayusculas" ? 56 : 62;
+  const run = nameRun(kit, fonts, text, iso + 30, iso / 2 + (cap * size) / 2, size, theme);
+  return {
+    width: Math.ceil(iso + 30 + run.width + 6),
+    height: iso,
+    layers: [
+      { name: "Símbolo", svg: isoLayer(kit, name, fonts, iso, theme) },
+      { name: "Nombre", svg: run.svg },
+    ],
+  };
+}
+
+// SVG del logo listo para descargar (texto en trazos, fondo transparente).
+export async function logoSvg(kit: BrandKit, name: string, variant: LogoVariant = "principal", theme: LogoTheme = "color") {
+  return artSvg(await logoArt(kit, name, variant, theme));
 }
 
 export const svgDataUri = (svg: string) => `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
-
-// PNG del logo (fondo transparente), a partir del SVG en trazos.
-export async function logoPng(
-  kit: BrandKit,
-  name: string,
-  layout: LogoLayout,
-  width: number,
-  headers?: Record<string, string>,
-) {
-  const svg = await logoSvg(kit, name, layout);
-  const [, vw, vh] = svg.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/)!.map(Number);
-  const height = Math.round((width * vh) / vw);
-  return new ImageResponse(createElement("img", { src: svgDataUri(svg), width, height, alt: "" }), { width, height, headers });
-}
