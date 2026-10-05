@@ -2,6 +2,7 @@
 // al publicar, para que el sitio público no necesite leer otras tablas.
 // Los textos se adaptan al país y al trato que eligió el dueño (tú / usted / vos).
 
+import type { BrandKit } from "@/lib/brand";
 import type { Tables } from "@/lib/database.types";
 import { norm } from "@/lib/interview";
 import { marketFor, say } from "@/lib/markets";
@@ -34,6 +35,7 @@ export type SiteContent = {
   photos: string[];
   ctaLabel: string; // se mantiene por las páginas publicadas antes
   copy?: SiteCopy;
+  brand?: BrandKit | null; // kit de marca comprado: colores, letras y logo de la página
 };
 
 type Phrase = { tu: string; usted: string; vos: string };
@@ -70,6 +72,7 @@ export function buildSiteContent(
   services: Tables<"services">[],
   logoUrl: string | null,
   photos: string[],
+  brand: BrandKit | null = null,
 ): SiteContent {
   const market = marketFor(b.country_code);
   const form = b.address_form ?? market?.addressForm ?? "tu";
@@ -129,6 +132,7 @@ export function buildSiteContent(
     logoUrl,
     photos,
     ctaLabel: cta,
+    brand,
     copy: {
       cta,
       leadIntro: t({

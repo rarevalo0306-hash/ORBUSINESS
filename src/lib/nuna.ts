@@ -250,6 +250,58 @@ async function askClaude(key: QuestionKey, answer: string, b: B): Promise<Answer
   return response.parsed_output;
 }
 
+// ---------- Respuesta estructurada genérica (para el kit de marca y otras tareas) ----------
+
+export async function aiJson<T>(opts: {
+  system: string;
+  user: string;
+  schema: z.ZodType<T>;
+  jsonHint: string; // descripción de las claves y un ejemplo, para DeepSeek
+  maxTokens?: number;
+}): Promise<T | null> {
+  const provider = nunaProvider();
+  if (provider === "rules") return null;
+  try {
+    if (provider === "anthropic") {
+      anthropicClient ??= new Anthropic();
+      const response = await anthropicClient.messages.parse({
+        model: process.env.ANTHROPIC_MODEL || "claude-opus-5-5",
+        max_tokens: opts.maxTokens ?? 4000,
+        output_config: { effort: "low", format: zodOutputFormat(opts.schema) },
+        system: opts.system,
+        messages: [{ role: "user", content: opts.user }],
+      });
+      return response.parsed_output ?? null;
+    }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const response = await fetch(`${DEEPSEEK_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}` },
+        body: JSON.stringify({
+          model: process.env.DEEPSEEK_MODEL || "deepseek-flash",
+          max_tokens: opts.maxTokens ?? 4000,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: `${opts.system}\n\nResponde solo con un objeto json. ${opts.jsonHint}` },
+            { role: "user", content: opts.user },
+          ],
+        }),
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (!response.ok) throw new Error(`DeepSeek respondió ${response.status}: ${await response.text()}`);
+      const data = (await response.json()) as { choices?: { message?: { content?: string | null } }[] };
+      const content = data.choices?.[0]?.message?.content;
+      if (!content) continue;
+      const parsed = opts.schema.safeParse(JSON.parse(content));
+      if (parsed.success) return parsed.data;
+    }
+    return null;
+  } catch (error) {
+    console.error(`Nuna (${provider}) falló en aiJson:`, error);
+    return null;
+  }
+}
+
 // ---------- Punto de entrada ----------
 
 export async function extractAnswer(key: QuestionKey, answer: string, b: B): Promise<Extraction> {

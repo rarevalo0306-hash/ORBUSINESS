@@ -2,20 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { publicAssetUrl, requireBusiness } from "@/lib/business";
-import { buildSiteContent, slugify } from "@/lib/site";
+import { siteContentFor } from "@/lib/brand-store";
+import { requireBusiness } from "@/lib/business";
+import { slugify } from "@/lib/site";
 
 export async function publishWebsite() {
   const { supabase, user, business } = await requireBusiness();
 
-  const [{ data: services }, { data: assets }, { data: website }] = await Promise.all([
-    supabase.from("services").select("*").eq("business_id", business.id).order("sort"),
-    supabase.from("brand_assets").select("kind, storage_path").eq("business_id", business.id).order("created_at"),
+  const [content, { data: website }] = await Promise.all([
+    siteContentFor(supabase, business),
     supabase.from("websites").select("subdomain").eq("business_id", business.id).maybeSingle(),
   ]);
-  const logo = assets?.find((a) => a.kind === "logo");
-  const photos = (assets ?? []).filter((a) => a.kind === "photo").map((a) => publicAssetUrl(a.storage_path));
-  const content = buildSiteContent(business, services ?? [], logo ? publicAssetUrl(logo.storage_path) : null, photos);
 
   // Dirección temporal: orbusiness.site/sitio/<nombre>. Si ya existe, se le agrega un número.
   const base = website?.subdomain ?? slugify(business.name);

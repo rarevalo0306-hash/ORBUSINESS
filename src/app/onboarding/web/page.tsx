@@ -3,8 +3,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { SiteView } from "@/components/site-view";
 import { Button, ButtonLink, PageTitle } from "@/components/ui";
-import { publicAssetUrl, requireBusiness } from "@/lib/business";
-import { buildSiteContent, slugify } from "@/lib/site";
+import { siteContentFor } from "@/lib/brand-store";
+import { requireBusiness } from "@/lib/business";
+import { slugify } from "@/lib/site";
 import { publishWebsite } from "./actions";
 
 export default async function WebsitePage(props: PageProps<"/onboarding/web">) {
@@ -13,14 +14,10 @@ export default async function WebsitePage(props: PageProps<"/onboarding/web">) {
   const query = await props.searchParams;
   const host = (await headers()).get("host") ?? "";
 
-  const [{ data: services }, { data: assets }, { data: website }] = await Promise.all([
-    supabase.from("services").select("*").eq("business_id", business.id).order("sort"),
-    supabase.from("brand_assets").select("kind, storage_path").eq("business_id", business.id).order("created_at"),
+  const [preview, { data: website }] = await Promise.all([
+    siteContentFor(supabase, business),
     supabase.from("websites").select("*").eq("business_id", business.id).maybeSingle(),
   ]);
-  const logo = assets?.find((a) => a.kind === "logo");
-  const photos = (assets ?? []).filter((a) => a.kind === "photo").map((a) => publicAssetUrl(a.storage_path));
-  const preview = buildSiteContent(business, services ?? [], logo ? publicAssetUrl(logo.storage_path) : null, photos);
   const published = website?.status === "published" && website.subdomain;
   const path = `/sitio/${website?.subdomain ?? slugify(business.name)}`;
 

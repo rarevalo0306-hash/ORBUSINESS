@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { sanitizeKit, storedKit, storedOptions, type BrandKit } from "@/lib/brand";
+import { proposeKits } from "@/lib/brand-ai";
+import { brandKitPrice, saveKit } from "@/lib/brand-store";
 import { requireBusiness } from "@/lib/business";
+import type { Json } from "@/lib/database.types";
 
 const KINDS = ["logo", "photo"] as const;
 
@@ -67,4 +71,74 @@ export async function saveBrand(formData: FormData) {
   });
   revalidatePath("/onboarding", "layout");
   redirect("/onboarding/web");
+}
+
+// ---------- Kit de marca ----------
+
+// Nuna propone 3 identidades de marca (gratis, para que el dueño las vea).
+export async function generateKits() {
+  const { supabase, user, business } = await requireBusiness();
+  const { data: services } = await supabase.from("services").select("name").eq("business_id", business.id).order("sort");
+  const kits = await proposeKits(business, services ?? []);
+  const { error } = await supabase
+    .from("businesses")
+    .update({ brand_options: kits as unknown as Json })
+    .eq("id", business.id);
+  if (error) throw new Error(error.message);
+  await supabase.from("audit_log").insert({
+    business_id: business.id,
+    actor: "nuna",
+    actor_user_id: user.id,
+    action: "brand.kits_proposed",
+    data: { kits: kits.map((k) => k.name) },
+  });
+  revalidatePath("/onboarding/marca");
+}
+
+export async function chooseKit(index: number) {
+  const { supabase, user, business } = await requireBusiness();
+  const kit = storedOptions(business.brand_options, business)[index];
+  if (!kit) throw new Error("Propuesta no encontrada");
+  await saveKit(supabase, business, kit, business.brand_status === "purchased" ? {} : { brand_status: "chosen" });
+  await supabase.from("audit_log").insert({
+    business_id: business.id,
+    actor: "owner",
+    actor_user_id: user.id,
+    action: "brand.kit_chosen",
+    data: { name: kit.name },
+  });
+  revalidatePath("/onboarding/marca");
+}
+
+// Ajustes del dueño (colores, letra, símbolo, forma, eslogan). Solo valores de las colecciones curadas.
+export async function customizeKit(changes: Partial<BrandKit>) {
+  const { supabase, business } = await requireBusiness();
+  const current = storedKit(business.brand_kit, business);
+  if (!current) throw new Error("Primero elige una propuesta");
+  await saveKit(supabase, business, sanitizeKit({ ...current, ...changes }, current));
+  revalidatePath("/onboarding/marca");
+  revalidatePath("/manual-de-marca");
+}
+
+// Compra del kit completo. MODO PRUEBA: no se cobra nada hasta conectar Stripe (fase 3).
+export async function purchaseKit() {
+  const { supabase, user, business } = await requireBusiness();
+  const kit = storedKit(business.brand_kit, business);
+  if (!kit) throw new Error("Primero elige una propuesta");
+  if (business.brand_status !== "purchased") {
+    const { error } = await supabase.rpc("purchase_brand_kit_test", { p_business: business.id });
+    if (error) throw new Error(error.message);
+    const { data: updated } = await supabase.from("businesses").select("*").eq("id", business.id).single();
+    // Con la compra: logo PNG público (firma de email) y la marca aplicada a la página publicada.
+    if (updated) await saveKit(supabase, updated, kit);
+    await supabase.from("audit_log").insert({
+      business_id: business.id,
+      actor: "owner",
+      actor_user_id: user.id,
+      action: "brand.kit_purchased",
+      data: { price: brandKitPrice(), test_mode: true, kit: kit.name },
+    });
+  }
+  revalidatePath("/onboarding", "layout");
+  redirect("/onboarding/marca?comprado=1#kit");
 }

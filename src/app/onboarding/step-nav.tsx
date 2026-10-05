@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 const STEPS = [
   { key: "interview", href: "/onboarding/entrevista", label: "Reconocimiento" },
-  { key: "brand", href: "/onboarding/marca", label: "Logo, fotos y web" },
+  { key: "brand", href: "/onboarding/marca", label: "Marca, fotos y web" },
   { key: "website", href: "/onboarding/web", label: "Página web" },
   { key: "crm", href: "/onboarding/crm", label: "CRM a tu medida" },
   { key: "activate", href: "/onboarding/activar", label: "Activar a Nuna" },

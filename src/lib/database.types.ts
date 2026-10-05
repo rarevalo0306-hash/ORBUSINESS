@@ -44,6 +44,10 @@ export type Database = {
           address: string | null;
           payment_methods: string[];
           address_form: string | null;
+          brand_options: Json;
+          brand_kit: Json | null;
+          brand_status: string;
+          brand_purchased_at: string | null;
           onboarding_step: string;
           status: string;
           created_at: string;
@@ -72,6 +76,10 @@ export type Database = {
           address?: string | null;
           payment_methods?: string[];
           address_form?: string | null;
+          brand_options?: Json;
+          brand_kit?: Json | null;
+          brand_status?: string;
+          brand_purchased_at?: string | null;
           onboarding_step?: string;
           status?: string;
         }
@@ -241,6 +249,7 @@ export type Database = {
     Functions: {
       create_business: { Args: { p_name: string }; Returns: string };
       next_quote_number: { Args: { p_business: string }; Returns: number };
+      purchase_brand_kit_test: { Args: { p_business: string }; Returns: undefined };
       submit_lead: {
         Args: {
           p_subdomain: string;
