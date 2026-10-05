@@ -80,6 +80,10 @@ export default async function BrandPage(props: PageProps<"/onboarding/marca">) {
   const source = website?.source ?? "new";
 
   const options = storedOptions(business.brand_options, business);
+  // Propuestas hechas antes del diseño moderno (no traen símbolo moderno): se ofrece rehacerlas.
+  const outdated =
+    Array.isArray(business.brand_options) &&
+    business.brand_options.some((o) => !o || typeof o !== "object" || Array.isArray(o) || !("mark" in o));
   const kit = storedKit(business.brand_kit, business);
   const base = kit?.base;
   const purchased = business.brand_status === "purchased";
@@ -104,6 +108,18 @@ export default async function BrandPage(props: PageProps<"/onboarding/marca">) {
           <p role="status" className="rounded-2xl border border-lime/40 bg-lime/10 p-4 text-lime">
             ¡Listo! Tu kit de marca es tuyo. Ya puedes descargarlo todo y ya quedó aplicado a tu página web.
           </p>
+        )}
+
+        {outdated && (
+          <div className="flex flex-col gap-4 rounded-2xl border border-lime/60 bg-lime/10 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-1">
+              <strong className="text-lime">Nuna tiene un estilo de diseño nuevo, más moderno.</strong>
+              <span className="text-sm text-muted">Tus propuestas son del diseño anterior. Pídele 3 nuevas para ver el estilo actual.</span>
+            </div>
+            <form action={generateKits}>
+              <SubmitButton pendingText="Nuna está diseñando… (unos segundos)">Hacer 3 propuestas nuevas</SubmitButton>
+            </form>
+          </div>
         )}
 
         {options.length === 0 ? (
