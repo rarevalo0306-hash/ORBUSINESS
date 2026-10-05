@@ -8,7 +8,7 @@ import {
   gradientEnd,
   kitPalette,
   onColor,
-  patternCss,
+  backdropCss,
   rgbText,
   type BrandBase,
   type BrandKit,
@@ -145,9 +145,13 @@ ${phone ? `${esc(phone)}<br>` : ""}${address ? `${esc(address)}<br>` : ""}${site
             <h1 className="text-5xl font-bold [font-family:var(--m-heading)]">{name}</h1>
             <p className="text-2xl text-neutral-600">{kit.slogan}</p>
           </div>
-          <div className="h-24 rounded-2xl" style={{ ...exact, backgroundImage: `${patternCss(kit, "#FFFFFF", 0.14)}, ${gradientCss(p)}` }} />
+          <div className="h-40 rounded-3xl" style={{ ...exact, background: backdropCss(kit, "oscuro") }} />
           <p className="text-sm text-neutral-500">Idea de marca: {kit.concept}</p>
         </header>
+
+        <Section n={next()} title="Tu marca de un vistazo">
+          <Shot src={img("tablero.png")} label="Tablero de marca: úsalo para presentar tu identidad (imprenta, diseñadores, socios)." />
+        </Section>
 
         <Section n={next()} title="Quiénes somos">
           <p className="text-xl leading-relaxed">{base.story}</p>
@@ -300,9 +304,12 @@ ${phone ? `${esc(phone)}<br>` : ""}${address ? `${esc(address)}<br>` : ""}${site
               </p>
             </div>
             <div className="flex flex-col gap-2 break-inside-avoid">
-              <h3 className="text-xl font-bold [font-family:var(--m-heading)]">Patrón</h3>
-              <div className="h-28 rounded-xl border border-neutral-200" style={{ ...exact, background: p.light, backgroundImage: patternCss(kit, p.primary, 0.35, 56) }} />
-              <p className="text-xs text-neutral-600">Para fondos, empaques, bolsas y detalles. Siempre suave, que no compita con el logo.</p>
+              <h3 className="text-xl font-bold [font-family:var(--m-heading)]">Fondos de marca</h3>
+              <div className="grid h-28 grid-cols-2 gap-2">
+                <div className="rounded-xl" style={{ ...exact, background: backdropCss(kit, "oscuro") }} />
+                <div className="rounded-xl border border-neutral-200" style={{ ...exact, background: backdropCss(kit, "claro") }} />
+              </div>
+              <p className="text-xs text-neutral-600">Para redes, portadas, empaques y la página web. Encima, el logo en blanco o a color.</p>
             </div>
           </div>
         </Section>

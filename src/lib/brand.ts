@@ -4,6 +4,7 @@
 // problemas de derechos. La IA elige y combina las piezas e inventa colores y textos a la medida.
 
 import { BRAND_ICONS } from "@/lib/brand-icons";
+import { MARKS, modernMark, type MarkColors, type MarkId } from "@/lib/brand-marks";
 import { norm } from "@/lib/interview";
 import { say, type AddressForm } from "@/lib/markets";
 
@@ -31,9 +32,11 @@ export type FontPair = {
 };
 
 export type Shape = "circle" | "rounded" | "hexagon" | "shield" | "diamond" | "ring" | "none";
-export type Layout = "clasico" | "apilado" | "emblema" | "palabra";
-export type NameStyle = "normal" | "mayusculas" | "dos-tonos";
-export type Pattern = "iconos" | "puntos" | "diagonales" | "ondas" | "cruces";
+export type Layout = "clasico" | "apilado" | "centrado" | "palabra" | "emblema";
+export type NameStyle = "normal" | "minusculas" | "mayusculas" | "dos-tonos";
+// Fondo gráfico de la marca (redes, papelería, página): moderno y sin cosas repetidas.
+export type Pattern = "aurora" | "formas" | "lineas" | "puntos" | "limpio";
+export type { MarkId } from "@/lib/brand-marks";
 
 export type BrandBase = {
   story: string; // historia de la marca
@@ -64,64 +67,56 @@ export type BrandKit = {
   palette: string; // id de paleta curada, o "custom" si usa colors
   colors?: Colors | null; // paleta inventada para este negocio (ya corregida para que se lea bien)
   fonts: string; // id de tipografías
-  icon: string; // id de ícono (BRAND_ICONS)
-  shape: Shape;
-  monogram: boolean; // iniciales en lugar de ícono
+  mark: MarkId; // símbolo moderno ("clasico" = forma + ícono, kits viejos)
+  icon: string; // id de ícono (BRAND_ICONS), para los símbolos con ícono
+  shape: Shape; // solo para el símbolo "clasico"
+  monogram: boolean; // solo para el símbolo "clasico"
   layout: Layout;
   nameStyle: NameStyle;
   pattern: Pattern;
   base?: BrandBase | null;
 };
 
-// ---------- Paletas curadas ----------
+// ---------- Paletas curadas (modernas: tonos sofisticados con un acento vivo) ----------
 
 export const PALETTES: Palette[] = [
-  { id: "obra-azul", name: "Obra confiable", primary: "#1F3A5F", secondary: "#F2A900", accent: "#E4572E", dark: "#14202E", light: "#F5F3EE", tags: ["ferreter", "construc", "taller", "mecan", "plomer", "electric", "mudanza"] },
-  { id: "herramienta-roja", name: "Herramienta roja", primary: "#B91C1C", secondary: "#1F2937", accent: "#F59E0B", dark: "#111827", light: "#F8F5F0", tags: ["ferreter", "taller", "mecan", "fumiga"] },
-  { id: "naranja-obra", name: "Naranja de obra", primary: "#C2410C", secondary: "#1E293B", accent: "#FACC15", dark: "#0F172A", light: "#FFF7ED", tags: ["ferreter", "construc", "mudanza"] },
-  { id: "gris-industrial", name: "Gris industrial", primary: "#374151", secondary: "#9CA3AF", accent: "#F97316", dark: "#111827", light: "#F3F4F6", tags: ["taller", "mecan", "ferreter", "electric"] },
-  { id: "verde-jardin", name: "Verde jardín", primary: "#2F6B3A", secondary: "#A3C93A", accent: "#F4B942", dark: "#1C2B1E", light: "#F3F6EC", tags: ["jardin", "vivero", "florister", "veterinar"] },
-  { id: "verde-fresco", name: "Verde fresco", primary: "#047857", secondary: "#0EA5E9", accent: "#FBBF24", dark: "#064E3B", light: "#F0FDF4", tags: ["limpieza", "farmac", "lavander", "fumiga"] },
-  { id: "azul-confianza", name: "Azul confianza", primary: "#1D4ED8", secondary: "#60A5FA", accent: "#F59E0B", dark: "#0F172A", light: "#F1F5F9", tags: ["clinica", "consultorio", "plomer", "limpieza", "electric", "papeler"] },
-  { id: "turquesa-salud", name: "Turquesa salud", primary: "#0E7490", secondary: "#67E8F9", accent: "#F97316", dark: "#083344", light: "#ECFEFF", tags: ["farmac", "clinica", "veterinar", "consultorio"] },
-  { id: "rosa-belleza", name: "Rosa belleza", primary: "#BE185D", secondary: "#F9A8D4", accent: "#D97706", dark: "#3B0A24", light: "#FDF2F8", tags: ["salon", "estetica", "belleza", "boutique", "reposter"] },
-  { id: "lila-elegante", name: "Lila elegante", primary: "#6D28D9", secondary: "#C4B5FD", accent: "#D97706", dark: "#2E1065", light: "#FAF5FF", tags: ["salon", "estetica", "boutique", "ropa"] },
-  { id: "negro-dorado", name: "Negro y dorado", primary: "#18181B", secondary: "#B8860B", accent: "#CA8A04", dark: "#0A0A0A", light: "#FAFAF9", tags: ["barber", "boutique", "joyer", "zapater", "ropa"] },
-  { id: "terracota", name: "Terracota casero", primary: "#B45309", secondary: "#FDE68A", accent: "#B91C1C", dark: "#3F1D0B", light: "#FFFBEB", tags: ["panader", "reposter", "comedor", "fritanga"] },
-  { id: "rojo-antojo", name: "Rojo antojo", primary: "#DC2626", secondary: "#FACC15", accent: "#15803D", dark: "#1F1300", light: "#FFFBEB", tags: ["restaurante", "fritanga", "taqueria", "comedor", "pizz"] },
-  { id: "cafe-artesanal", name: "Café artesanal", primary: "#6F4E37", secondary: "#D4A373", accent: "#C2410C", dark: "#2B1D14", light: "#FAF3E8", tags: ["cafeter", "panader", "reposter"] },
-  { id: "pulperia-alegre", name: "Tienda alegre", primary: "#2563EB", secondary: "#FACC15", accent: "#DC2626", dark: "#111827", light: "#FFFBEB", tags: ["pulper", "abarrot", "minisuper", "supermercado", "tienda", "bodega", "colmado"] },
-  { id: "coral-moderno", name: "Coral moderno", primary: "#C9363A", secondary: "#247BA0", accent: "#FFB224", dark: "#1B1B1E", light: "#FFF8F0", tags: ["ropa", "tienda", "zapater", "libreria", "papeler"] },
+  { id: "bosque", name: "Bosque y salvia", primary: "#1E4D3A", secondary: "#B7C9A8", accent: "#E9B949", dark: "#10241B", light: "#F4F1EA", tags: ["jardin", "vivero", "verdur", "frut", "cafeter", "ferreter"] },
+  { id: "tinta-lima", name: "Tinta y lima", primary: "#141A2E", secondary: "#E3E8F2", accent: "#C6F36B", dark: "#0B0F1C", light: "#F7F8FB", tags: ["tecnolog", "celular", "computa", "gimnas", "barber", "taller"] },
+  { id: "terracota", name: "Terracota y arena", primary: "#A8461F", secondary: "#E9D8BF", accent: "#2A9D8F", dark: "#2A170E", light: "#FBF7F1", tags: ["panader", "reposter", "comedor", "restaurante", "artesan", "ferreter", "construc"] },
+  { id: "cobalto", name: "Cobalto y durazno", primary: "#1F3FD1", secondary: "#CFD8FF", accent: "#FF8A5B", dark: "#0B1438", light: "#F6F7FF", tags: ["clinica", "consultorio", "limpieza", "plomer", "electric", "conta", "asesor", "escuela"] },
+  { id: "ciruela", name: "Ciruela y rubor", primary: "#5A2448", secondary: "#F3C9D3", accent: "#F2994A", dark: "#22101C", light: "#FCF6F8", tags: ["salon", "estetica", "belleza", "boutique", "ropa", "joyer"] },
+  { id: "oliva", name: "Oliva y mantequilla", primary: "#4A5223", secondary: "#F1E6A6", accent: "#D9622B", dark: "#1C1F0E", light: "#FAF8EF", tags: ["frut", "verdur", "mercado", "cafeter", "comedor"] },
+  { id: "carbon-coral", name: "Carbón y coral", primary: "#1E1E1E", secondary: "#E9E3DA", accent: "#FF6B4A", dark: "#111111", light: "#F7F5F2", tags: ["barber", "taller", "mecan", "ropa", "zapater", "fotograf", "ferreter"] },
+  { id: "petroleo", name: "Petróleo y melocotón", primary: "#0F4C5C", secondary: "#FFD9BF", accent: "#E36414", dark: "#082E38", light: "#F5FAF9", tags: ["farmac", "clinica", "veterinar", "lavander", "plomer"] },
+  { id: "cereza", name: "Cereza y crema", primary: "#9B1D25", secondary: "#F2E8CF", accent: "#3D5A80", dark: "#2B0D10", light: "#FFFBF3", tags: ["restaurante", "pizz", "taqueria", "fritanga", "carnic", "ferreter"] },
+  { id: "menta", name: "Menta y grafito", primary: "#0D6E5A", secondary: "#CFEBE1", accent: "#F4A261", dark: "#0B1F1A", light: "#F5FBF8", tags: ["farmac", "limpieza", "lavander", "veterinar", "clinica"] },
+  { id: "lavanda", name: "Lavanda de noche", primary: "#4A3A8C", secondary: "#DDD5F8", accent: "#FFB547", dark: "#1A1433", light: "#F9F7FF", tags: ["estetica", "salon", "escuela", "juguet", "libreria", "papeler"] },
+  { id: "mostaza", name: "Mostaza y azul tinta", primary: "#8A5A00", secondary: "#FCE9B8", accent: "#1F4E79", dark: "#1E1A12", light: "#FFFBF1", tags: ["pulper", "abarrot", "tienda", "minisuper", "bodega", "panader"] },
+  { id: "chicle", name: "Chicle y ámbar", primary: "#B8235A", secondary: "#FFD3E3", accent: "#FFB000", dark: "#2A0F1C", light: "#FFF6FA", tags: ["reposter", "heladeria", "dulcer", "juguet", "florister", "boutique"] },
+  { id: "electrico", name: "Azul eléctrico y menta", primary: "#2440E6", secondary: "#B9F3E4", accent: "#FF5D73", dark: "#0A1033", light: "#F6F8FF", tags: ["pulper", "tienda", "minisuper", "celular", "tecnolog", "envio"] },
+  { id: "arcilla", name: "Arcilla y salvia", primary: "#8A4A2F", secondary: "#CDD7C2", accent: "#E8A33D", dark: "#2A1A12", light: "#F7F3EE", tags: ["cafeter", "artesan", "construc", "muebl", "carpinter"] },
+  { id: "pino", name: "Pino y limón", primary: "#14532D", secondary: "#D9F99D", accent: "#FACC15", dark: "#052E16", light: "#F3FBF4", tags: ["jardin", "vivero", "mercado", "fumiga", "deporte"] },
 ];
 
-// ---------- Tipografías (Google Fonts, licencia libre) ----------
+// ---------- Tipografías (Google Fonts, licencia libre; las que usan las marcas de hoy) ----------
 
 export const FONT_PAIRS: FontPair[] = [
-  { id: "solida", name: "Sólida", heading: { family: "Archivo Black", weight: 400 }, body: { family: "Archivo", weight: 400 }, mood: "fuerte y directa" },
-  { id: "moderna", name: "Moderna", heading: { family: "Montserrat", weight: 700 }, body: { family: "Open Sans", weight: 400 }, mood: "moderna y profesional" },
-  { id: "fuerte", name: "Fuerte", heading: { family: "Oswald", weight: 600 }, body: { family: "Source Sans 3", weight: 400 }, mood: "firme y compacta" },
-  { id: "tecnica", name: "Técnica", heading: { family: "Barlow Condensed", weight: 700 }, body: { family: "Barlow", weight: 400 }, mood: "técnica y práctica" },
-  { id: "amigable", name: "Amigable", heading: { family: "Fredoka", weight: 600 }, body: { family: "Nunito", weight: 400 }, mood: "cercana y alegre" },
-  { id: "redonda", name: "Redonda", heading: { family: "Poppins", weight: 600 }, body: { family: "Poppins", weight: 400 }, mood: "limpia y amable" },
-  { id: "fresca", name: "Fresca", heading: { family: "Rubik", weight: 600 }, body: { family: "Rubik", weight: 400 }, mood: "fresca y joven" },
-  { id: "elegante", name: "Elegante", heading: { family: "Playfair Display", weight: 700 }, body: { family: "Lato", weight: 400 }, mood: "elegante y cuidada" },
-  { id: "clasica", name: "Clásica", heading: { family: "DM Serif Display", weight: 400 }, body: { family: "DM Sans", weight: 400 }, mood: "clásica y confiable" },
-  { id: "artesanal", name: "Artesanal", heading: { family: "Bitter", weight: 700 }, body: { family: "Work Sans", weight: 400 }, mood: "artesanal y honesta" },
-  { id: "cartel", name: "Cartel", heading: { family: "Bebas Neue", weight: 400 }, body: { family: "Inter", weight: 400 }, mood: "alta, de cartel, llama la atención" },
-  { id: "tropical", name: "Tropical", heading: { family: "Pacifico", weight: 400 }, body: { family: "Nunito", weight: 400 }, mood: "escrita a mano, alegre y tropical", script: true },
-  { id: "retro", name: "Retro", heading: { family: "Righteous", weight: 400 }, body: { family: "Rubik", weight: 400 }, mood: "retro y divertida" },
-  { id: "revista", name: "Revista", heading: { family: "Abril Fatface", weight: 400 }, body: { family: "Lato", weight: 400 }, mood: "de revista, llamativa y con estilo" },
-  { id: "dulce", name: "Dulce", heading: { family: "Baloo 2", weight: 700 }, body: { family: "Nunito", weight: 400 }, mood: "suave, dulce y cercana" },
-  { id: "digital", name: "Digital", heading: { family: "Space Grotesk", weight: 700 }, body: { family: "Inter", weight: 400 }, mood: "tecnológica y actual" },
-  { id: "rotulo", name: "Rótulo", heading: { family: "Lobster", weight: 400 }, body: { family: "Open Sans", weight: 400 }, mood: "de rótulo clásico pintado a mano", script: true },
-  { id: "lujo", name: "Lujo", heading: { family: "Cinzel", weight: 700 }, body: { family: "Raleway", weight: 400 }, mood: "de lujo, señorial" },
-  { id: "urbana", name: "Urbana", heading: { family: "Anton", weight: 400 }, body: { family: "Roboto", weight: 400 }, mood: "urbana y potente" },
-  { id: "ligera", name: "Ligera", heading: { family: "Comfortaa", weight: 700 }, body: { family: "Nunito", weight: 400 }, mood: "ligera y redondeada" },
-  { id: "vanguardia", name: "Vanguardia", heading: { family: "Syne", weight: 700 }, body: { family: "Manrope", weight: 400 }, mood: "creativa y de vanguardia" },
-  { id: "taller", name: "Taller", heading: { family: "Alfa Slab One", weight: 400 }, body: { family: "Karla", weight: 400 }, mood: "de taller, robusta y con carácter" },
-  { id: "callejera", name: "Callejera", heading: { family: "Permanent Marker", weight: 400 }, body: { family: "Karla", weight: 400 }, mood: "hecha a mano, callejera y auténtica", script: true },
-  { id: "geometrica", name: "Geométrica", heading: { family: "Outfit", weight: 700 }, body: { family: "Outfit", weight: 400 }, mood: "geométrica y limpia" },
-  { id: "gordita", name: "Gordita", heading: { family: "Lilita One", weight: 400 }, body: { family: "Nunito", weight: 400 }, mood: "gruesa, simpática y popular" },
+  { id: "grotesca", name: "Grotesca", heading: { family: "Bricolage Grotesque", weight: 700 }, body: { family: "Inter", weight: 400 }, mood: "actual, con carácter y un toque artesanal" },
+  { id: "jakarta", name: "Jakarta", heading: { family: "Plus Jakarta Sans", weight: 800 }, body: { family: "Plus Jakarta Sans", weight: 400 }, mood: "moderna, limpia y confiable" },
+  { id: "sora", name: "Sora", heading: { family: "Sora", weight: 700 }, body: { family: "Inter", weight: 400 }, mood: "tecnológica y amable" },
+  { id: "ancha", name: "Ancha", heading: { family: "Unbounded", weight: 600 }, body: { family: "Manrope", weight: 400 }, mood: "ancha, audaz y llamativa" },
+  { id: "geometrica", name: "Geométrica", heading: { family: "Outfit", weight: 700 }, body: { family: "Outfit", weight: 400 }, mood: "geométrica, simple y cercana" },
+  { id: "digital", name: "Digital", heading: { family: "Space Grotesk", weight: 700 }, body: { family: "Inter", weight: 400 }, mood: "técnica y actual" },
+  { id: "vanguardia", name: "Vanguardia", heading: { family: "Syne", weight: 700 }, body: { family: "Manrope", weight: 400 }, mood: "creativa y de diseño" },
+  { id: "editorial", name: "Editorial", heading: { family: "Instrument Serif", weight: 400 }, body: { family: "Instrument Sans", weight: 400 }, mood: "elegante, de revista moderna" },
+  { id: "fraunces", name: "Serif cálida", heading: { family: "Fraunces", weight: 600 }, body: { family: "DM Sans", weight: 400 }, mood: "cálida, con oficio y tradición moderna" },
+  { id: "manrope", name: "Firme", heading: { family: "Manrope", weight: 800 }, body: { family: "Manrope", weight: 400 }, mood: "firme, seria y profesional" },
+  { id: "amable", name: "Amable", heading: { family: "Gabarito", weight: 800 }, body: { family: "Figtree", weight: 400 }, mood: "amable, redondeada y popular" },
+  { id: "figtree", name: "Clara", heading: { family: "Figtree", weight: 800 }, body: { family: "Figtree", weight: 400 }, mood: "clara, cercana y fácil de leer" },
+  { id: "display", name: "Display", heading: { family: "Red Hat Display", weight: 800 }, body: { family: "Red Hat Text", weight: 400 }, mood: "de marca grande, compacta y moderna" },
+  { id: "suave", name: "Suave", heading: { family: "Lexend", weight: 600 }, body: { family: "Lexend", weight: 400 }, mood: "suave, accesible y muy legible" },
+  { id: "clasica", name: "Clásica moderna", heading: { family: "Young Serif", weight: 400 }, body: { family: "Hanken Grotesk", weight: 400 }, mood: "clásica pero actual, de confianza" },
+  { id: "potente", name: "Potente", heading: { family: "Epilogue", weight: 800 }, body: { family: "Epilogue", weight: 400 }, mood: "potente, urbana y directa" },
 ];
 
 // ---------- Opciones de diseño ----------
@@ -137,25 +132,28 @@ export const SHAPES: { id: Shape; label: string }[] = [
 ];
 
 export const LAYOUTS: { id: Layout; label: string; note: string }[] = [
-  { id: "clasico", label: "Clásico", note: "Símbolo y nombre en línea" },
-  { id: "apilado", label: "Apilado", note: "Nombre en dos líneas y texto pequeño" },
-  { id: "emblema", label: "Emblema", note: "Sello redondo con el nombre alrededor" },
+  { id: "clasico", label: "Símbolo y nombre", note: "El símbolo a la izquierda, el nombre al lado" },
+  { id: "centrado", label: "Centrado", note: "El símbolo arriba y el nombre debajo" },
+  { id: "apilado", label: "Apilado", note: "El nombre en dos líneas junto al símbolo" },
   { id: "palabra", label: "Solo nombre", note: "El nombre es el logo, con un detalle de color" },
 ];
 
 export const NAME_STYLES: { id: NameStyle; label: string }[] = [
   { id: "normal", label: "Normal" },
+  { id: "minusculas", label: "minúsculas" },
   { id: "mayusculas", label: "MAYÚSCULAS" },
   { id: "dos-tonos", label: "Dos colores" },
 ];
 
 export const PATTERNS: { id: Pattern; label: string }[] = [
-  { id: "iconos", label: "Con tu símbolo" },
+  { id: "aurora", label: "Degradado suave" },
+  { id: "formas", label: "Formas grandes" },
+  { id: "lineas", label: "Líneas" },
   { id: "puntos", label: "Puntos" },
-  { id: "diagonales", label: "Rayas" },
-  { id: "ondas", label: "Ondas" },
-  { id: "cruces", label: "Cruces" },
+  { id: "limpio", label: "Limpio" },
 ];
+
+export { MARKS };
 
 // ---------- Íconos por giro ----------
 
@@ -211,6 +209,7 @@ export function palettesFor(industry: string | null): Palette[] {
 
 export const paletteById = (id: string) => PALETTES.find((p) => p.id === id) ?? PALETTES[0];
 export const fontsById = (id: string) => FONT_PAIRS.find((f) => f.id === id) ?? FONT_PAIRS[1];
+export const isModernMark = (mark: MarkId) => mark !== "clasico";
 
 // Paleta del kit: la inventada para el negocio o una curada.
 export function kitPalette(kit: Pick<BrandKit, "palette" | "colors">): Palette {
@@ -325,8 +324,14 @@ export function googleFontsHref(pairs: FontPair[]) {
 
 // Nombre como se escribe en el logo.
 export function logoName(kit: Pick<BrandKit, "nameStyle" | "fonts">, name: string) {
-  return kit.nameStyle === "mayusculas" && !fontsById(kit.fonts).script ? name.toLocaleUpperCase("es") : name;
+  if (fontsById(kit.fonts).script) return name;
+  if (kit.nameStyle === "mayusculas") return name.toLocaleUpperCase("es");
+  if (kit.nameStyle === "minusculas") return name.toLocaleLowerCase("es");
+  return name;
 }
+
+// Espacio entre letras del nombre: apretado (moderno) o abierto en mayúsculas.
+export const nameTracking = (kit: Pick<BrandKit, "nameStyle">) => (kit.nameStyle === "mayusculas" ? 0.06 : -0.025);
 
 // Nombre en dos partes (para el nombre a dos colores y el logo apilado):
 // "Ferretería Arévalo" → ["Ferretería", "Arévalo"]; "La Casa del Pan" → ["La Casa", "del Pan"].
@@ -399,11 +404,32 @@ export function markSvg(
 
 // Isotipo como SVG completo. Para iniciales en pantalla usa <text>; en descargas, trazos (brand-render).
 // mono: dibuja todo en un solo color (blanco para fondos oscuros, oscuro para sellos).
+// Colores del símbolo moderno según el uso: a color, en blanco (fondos oscuros) o a un color.
+export function markColors(kit: BrandKit, theme: "color" | "blanco" | "mono" = "color"): MarkColors {
+  const p = kitPalette(kit);
+  if (theme === "blanco") return { a: "#FFFFFF", b: mixHex("#FFFFFF", p.primary, 0.35), c: mixHex("#FFFFFF", p.primary, 0.18), on: p.primary };
+  if (theme === "mono") return { a: p.dark, b: mixHex(p.dark, "#FFFFFF", 0.45), c: mixHex(p.dark, "#FFFFFF", 0.25), on: "#FFFFFF" };
+  const lens = kit.mark === "circulos" ? mixHex(p.primary, p.dark, 0.45) : p.secondary;
+  return { a: p.primary, b: p.accent, c: lens, on: onColor(p.primary, p.dark) };
+}
+
+// Letra principal del símbolo (la inicial del nombre).
+export const markChar = (name: string) => initials(name).charAt(0) || "A";
+
 export function isotypeSvg(
   kit: BrandKit,
-  opts: { size?: number; mono?: string; monogramPath?: string; initials?: string } = {},
+  opts: { size?: number; mono?: string; monogramPath?: string; initials?: string; letterPath?: string; theme?: "color" | "blanco" | "mono" } = {},
 ) {
   const size = opts.size ?? 100;
+  if (isModernMark(kit.mark)) {
+    const theme = opts.theme ?? (opts.mono === "#FFFFFF" ? "blanco" : opts.mono ? "mono" : "color");
+    const f = fontsById(kit.fonts).heading;
+    const inner = modernMark(kit.mark, markColors(kit, theme), {
+      icon: kit.icon,
+      letter: { path: opts.letterPath, char: markChar(opts.initials ?? "A"), family: f.family, weight: f.weight },
+    });
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${size}" height="${size}">${inner}</svg>`;
+  }
   const p = kitPalette(kit);
   const filled = kit.shape !== "none" && kit.shape !== "ring";
   const fill = opts.mono ?? p.primary;
@@ -413,37 +439,77 @@ export function isotypeSvg(
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">${shapeSvg(kit.shape, size, fill)}${mark}</svg>`;
 }
 
-// ---------- Patrón de marca ----------
+// ---------- Fondo gráfico de la marca ----------
 
-// Mosaico de tile × tile que se repite sin cortes. color = color del dibujo.
-export function patternTile(kit: Pick<BrandKit, "pattern" | "icon" | "fonts">, tile: number, color: string) {
-  const t = tile;
-  const q = t / 4;
+// Fondo moderno para un área de w × h (redes, papelería, página). base = color de fondo.
+// tone: "oscuro" (fondo del color principal, texto blanco) o "claro" (fondo claro, texto oscuro).
+// Solo usa degradados radiales y formas (se ve igual en PNG, PDF y PSD).
+let backdropCount = 0;
+export function backdropSvg(kit: Pick<BrandKit, "pattern" | "palette" | "colors">, w: number, h: number, tone: "oscuro" | "claro") {
+  const p = kitPalette(kit);
+  const base = tone === "oscuro" ? p.primary : p.light;
+  const id = `bd${++backdropCount}`;
+  const m = Math.max(w, h);
+  const blob = (n: number, cx: number, cy: number, r: number, color: string, opacity: number) =>
+    `<radialGradient id="${id}-${n}" cx="${cx}" cy="${cy}" r="${r}" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="${color}" stop-opacity="${opacity}"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></radialGradient>`;
+  let out = `<rect width="${w}" height="${h}" fill="${base}"/>`;
   switch (kit.pattern) {
-    case "puntos":
-      return `<circle cx="${q}" cy="${q}" r="${t * 0.05}" fill="${color}"/><circle cx="${3 * q}" cy="${3 * q}" r="${t * 0.05}" fill="${color}"/>`;
-    case "diagonales":
-      return `<g stroke="${color}" stroke-width="${t * 0.1}"><line x1="${-q}" y1="${q}" x2="${q}" y2="${-q}"/><line x1="0" y1="${t}" x2="${t}" y2="0"/><line x1="${3 * q}" y1="${t + q}" x2="${t + q}" y2="${3 * q}"/></g>`;
-    case "ondas":
-      return `<g fill="none" stroke="${color}" stroke-width="${t * 0.05}" stroke-linecap="round"><path d="M0 ${q} Q${q} 0 ${2 * q} ${q} T${t} ${q}"/><path d="M0 ${3 * q} Q${q} ${2 * q} ${2 * q} ${3 * q} T${t} ${3 * q}"/></g>`;
-    case "cruces": {
-      const a = t * 0.07;
-      const cross = (x: number, y: number) => `<path d="M${x - a} ${y}H${x + a}M${x} ${y - a}V${y + a}"/>`;
-      return `<g stroke="${color}" stroke-width="${t * 0.035}" stroke-linecap="round">${cross(q, q)}${cross(3 * q, 3 * q)}</g>`;
+    case "aurora": {
+      const blobs =
+        tone === "oscuro"
+          ? [blob(1, w * 0.95, h * 0.0, m * 0.55, p.accent, 0.5), blob(2, w * 0.0, h * 1.0, m * 0.75, p.dark, 0.8), blob(3, w * 0.3, h * 0.25, m * 0.5, mixHex(p.primary, "#FFFFFF", 0.22), 0.55)]
+          : [blob(1, w * 0.95, h * 0.0, m * 0.7, p.accent, 0.35), blob(2, w * 0.0, h * 1.0, m * 0.7, p.secondary, 0.7), blob(3, w * 0.6, h * 0.6, m * 0.4, p.primary, 0.08)];
+      out += `<defs>${blobs.join("")}</defs>` + [1, 2, 3].map((n) => `<rect width="${w}" height="${h}" fill="url(#${id}-${n})"/>`).join("");
+      break;
     }
-    default: {
-      const s = t * 0.32;
-      const icon = (x: number, y: number, rot: number) =>
-        `<g transform="translate(${x} ${y}) rotate(${rot}) translate(${-s / 2} ${-s / 2})">${markSvg({ ...kit, monogram: false }, s, color, { scale: 1 })}</g>`;
-      return icon(q, q, -14) + icon(3 * q, 3 * q, 12);
+    case "formas": {
+      const c1 = tone === "oscuro" ? p.accent : p.secondary;
+      const c2 = tone === "oscuro" ? mixHex(p.primary, "#FFFFFF", 0.12) : mixHex(p.light, p.primary, 0.08);
+      out += `<circle cx="${w * 0.98}" cy="${h * 0.02}" r="${m * 0.32}" fill="${c1}" fill-opacity="${tone === "oscuro" ? 0.9 : 1}"/>`;
+      out += `<path d="M${-m * 0.02} ${h} V${h - m * 0.22} A${m * 0.26} ${m * 0.26} 0 0 1 ${m * 0.5} ${h - m * 0.22} V${h} Z" fill="${c2}"/>`;
+      break;
     }
+    case "lineas": {
+      const color = tone === "oscuro" ? "#FFFFFF" : p.primary;
+      const rings = Array.from({ length: 9 }, (_, i) => `<circle cx="${w}" cy="${h}" r="${m * 0.12 * (i + 1)}" fill="none" stroke="${color}" stroke-opacity="${tone === "oscuro" ? 0.13 : 0.1}" stroke-width="${m * 0.003}"/>`);
+      out += rings.join("");
+      break;
+    }
+    case "puntos": {
+      const color = tone === "oscuro" ? "#FFFFFF" : p.primary;
+      const step = m / 28;
+      let dots = "";
+      for (let y = step / 2; y < h; y += step) for (let x = step / 2; x < w; x += step) dots += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(step * 0.07).toFixed(2)}"/>`;
+      out += `<g fill="${color}" fill-opacity="${tone === "oscuro" ? 0.18 : 0.14}">${dots}</g>`;
+      break;
+    }
+    default:
+      break;
   }
+  return out;
 }
 
-// Patrón para fondos en pantalla (CSS background-image).
-export function patternCss(kit: Pick<BrandKit, "pattern" | "icon" | "fonts">, color: string, opacity: number, tile = 64) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${tile}" height="${tile}" viewBox="0 0 ${tile} ${tile}"><g opacity="${opacity}">${patternTile(kit, tile, color)}</g></svg>`;
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+// El mismo fondo para pantalla (CSS).
+export function backdropCss(kit: Pick<BrandKit, "pattern" | "palette" | "colors">, tone: "oscuro" | "claro") {
+  const p = kitPalette(kit);
+  const base = tone === "oscuro" ? p.primary : p.light;
+  const a = (hex: string, alpha: number) => `${hex}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`;
+  switch (kit.pattern) {
+    case "aurora":
+      return tone === "oscuro"
+        ? `radial-gradient(circle at 95% 0%, ${a(p.accent, 0.5)}, transparent 50%), radial-gradient(circle at 0% 100%, ${a(p.dark, 0.8)}, transparent 65%), radial-gradient(circle at 30% 25%, ${a(mixHex(p.primary, "#FFFFFF", 0.22), 0.55)}, transparent 50%), ${base}`
+        : `radial-gradient(circle at 95% 0%, ${a(p.accent, 0.35)}, transparent 55%), radial-gradient(circle at 0% 100%, ${a(p.secondary, 0.7)}, transparent 60%), ${base}`;
+    case "formas": {
+      const c1 = tone === "oscuro" ? p.accent : p.secondary;
+      return `radial-gradient(circle at 100% 0%, ${c1} 0 30%, transparent 30.5%), ${base}`;
+    }
+    case "lineas":
+      return `repeating-radial-gradient(circle at 100% 100%, transparent 0 46px, ${a(tone === "oscuro" ? "#FFFFFF" : p.primary, 0.12)} 46px 48px), ${base}`;
+    case "puntos":
+      return `radial-gradient(${a(tone === "oscuro" ? "#FFFFFF" : p.primary, 0.2)} 1.2px, transparent 1.4px) 0 0 / 18px 18px, ${base}`;
+    default:
+      return base;
+  }
 }
 
 // ---------- Propuestas por reglas (sin IA o si la IA falla) ----------
@@ -528,9 +594,9 @@ export function rulesKits(b: BusinessForKit): BrandKit[] {
   const slogans = slogansFor(b);
   const caption = captionFor(b);
   const designs: Omit<BrandKit, "proposition" | "slogan" | "caption" | "palette" | "icon">[] = [
-    { name: "Fuerte y confiable", concept: "Colores sólidos, letra firme y un escudo: transmite seriedad y que aquí el cliente encuentra lo que busca.", personality: ["Confiable", "Práctico", "Cercano"], tone: "Claro y directo, con buen trato.", fonts: "solida", shape: "shield", monogram: false, layout: "clasico", nameStyle: "mayusculas", pattern: "diagonales" },
-    { name: "Moderno y profesional", concept: "El nombre es el protagonista, a dos colores: limpio, actual y fácil de recordar en redes y en la página web.", personality: ["Profesional", "Moderno", "Atento"], tone: "Profesional pero cálido.", fonts: "geometrica", shape: "rounded", monogram: false, layout: "palabra", nameStyle: "dos-tonos", pattern: "puntos" },
-    { name: "Cercano y de barrio", concept: "Un sello redondo como los de antes, con las iniciales del negocio: el lugar de confianza de la zona.", personality: ["Amable", "Alegre", "De confianza"], tone: "Cercano, como un vecino.", fonts: "gordita", shape: "circle", monogram: true, layout: "emblema", nameStyle: "mayusculas", pattern: "iconos" },
+    { name: "Inicial con presencia", concept: "La inicial del negocio dentro de un cuadro suave, con letra moderna y nombre en minúsculas: se reconoce de lejos y se ve actual en redes y en el local.", personality: ["Confiable", "Práctico", "Actual"], tone: "Claro y directo, con buen trato.", fonts: "jakarta", mark: "letra-squircle", shape: "rounded", monogram: false, layout: "clasico", nameStyle: "minusculas", pattern: "aurora" },
+    { name: "Formas que crecen", concept: "Un símbolo geométrico simple, como las marcas de diseño de hoy, y el nombre en dos líneas: ordenado, profesional y fácil de recordar.", personality: ["Profesional", "Moderno", "Atento"], tone: "Profesional pero cálido.", fonts: "grotesca", mark: "arco", shape: "rounded", monogram: false, layout: "apilado", nameStyle: "normal", pattern: "formas" },
+    { name: "El nombre manda", concept: "El nombre es el logo, con letra con carácter y un punto de color: directo, seguro y muy fácil de usar en todo.", personality: ["Cercano", "Seguro", "Alegre"], tone: "Cercano, como un vecino de confianza.", fonts: "display", mark: "letra-circulo", shape: "circle", monogram: false, layout: "palabra", nameStyle: "dos-tonos", pattern: "lineas" },
   ];
   return designs.map((d, i) => ({
     ...d,
@@ -631,7 +697,8 @@ function sanitizeBase(v: unknown, fallback: BrandBase | null): BrandBase | null 
 export function sanitizeKit(k: Partial<BrandKit>, fallback: BrandKit): BrandKit {
   const colors = k.colors === undefined ? (fallback.colors ?? null) : fixColors(k.colors);
   const fonts = FONT_PAIRS.some((f) => f.id === k.fonts) ? k.fonts! : fallback.fonts;
-  const nameStyle = oneOf(k.nameStyle, ["normal", "mayusculas", "dos-tonos"] as const, fallback.nameStyle ?? "normal");
+  const nameStyle = oneOf(k.nameStyle, ["normal", "minusculas", "mayusculas", "dos-tonos"] as const, fallback.nameStyle ?? "normal");
+  const marks = MARKS.map((m) => m.id);
   const curated = PALETTES.some((p) => p.id === k.palette) ? k.palette! : PALETTES.some((p) => p.id === fallback.palette) ? fallback.palette : PALETTES[0].id;
   return {
     name: str(k.name, 60, fallback.name),
@@ -644,12 +711,13 @@ export function sanitizeKit(k: Partial<BrandKit>, fallback: BrandKit): BrandKit 
     palette: colors ? "custom" : curated,
     colors,
     fonts,
+    mark: oneOf(k.mark, marks, isModernMark(fallback.mark ?? "clasico") ? fallback.mark : "letra-squircle"),
     icon: k.icon && BRAND_ICONS[k.icon] ? k.icon : fallback.icon,
     shape: oneOf(k.shape, ["circle", "rounded", "hexagon", "shield", "diamond", "ring", "none"] as const, fallback.shape),
     monogram: typeof k.monogram === "boolean" ? k.monogram : fallback.monogram,
-    layout: oneOf(k.layout, ["clasico", "apilado", "emblema", "palabra"] as const, fallback.layout ?? "clasico"),
+    layout: oneOf(k.layout, ["clasico", "apilado", "centrado", "palabra"] as const, fallback.layout === "emblema" ? "centrado" : (fallback.layout ?? "clasico")),
     nameStyle: nameStyle === "mayusculas" && fontsById(fonts).script ? "normal" : nameStyle,
-    pattern: oneOf(k.pattern, ["iconos", "puntos", "diagonales", "ondas", "cruces"] as const, fallback.pattern ?? "puntos"),
+    pattern: oneOf(k.pattern, ["aurora", "formas", "lineas", "puntos", "limpio"] as const, oneOf(fallback.pattern, ["aurora", "formas", "lineas", "puntos", "limpio"] as const, "aurora")),
     base: sanitizeBase(k.base, k.base === null ? null : (fallback.base ?? null)),
   };
 }

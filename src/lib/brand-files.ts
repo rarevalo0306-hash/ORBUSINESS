@@ -5,7 +5,7 @@ import { zipSync } from "fflate";
 import PDFDocument from "pdfkit";
 import sharp from "sharp";
 import SVGtoPDF from "svg-to-pdfkit";
-import { cmykText, fontsById, kitPalette, patternTile, rgbText, rulesBase, type BrandKit } from "@/lib/brand";
+import { backdropSvg, cmykText, fontsById, kitPalette, rgbText, rulesBase, type BrandKit } from "@/lib/brand";
 import {
   bolsaArt,
   camisetaArt,
@@ -18,6 +18,7 @@ import {
   perfilArt,
   portadaArt,
   publicacionArt,
+  tableroArt,
   tarjetaArts,
   vehiculoArt,
   volanteArt,
@@ -30,7 +31,7 @@ import { artSvg, logoArt, type Art, type LogoTheme, type LogoVariant } from "@/l
 // Adobe (.ase) y todo junto en un .zip.
 
 export type Format = "svg" | "png" | "jpg" | "pdf" | "psd" | "docx" | "ase" | "txt";
-export type Group = "Logo" | "Redes sociales" | "Papelería" | "Mockups" | "Colores y patrón";
+export type Group = "Presentación" | "Logo" | "Redes sociales" | "Papelería" | "Mockups" | "Colores y patrón";
 
 type Item = {
   id: string;
@@ -60,12 +61,13 @@ const logoItem = (id: string, label: string, variant: LogoVariant, theme: LogoTh
 });
 
 export const ITEMS: Item[] = [
+  { id: "tablero", label: "Tablero de marca (presentación)", group: "Presentación", formats: ["png", "jpg", "pdf"], px: 2400, art: tableroArt },
   logoItem("logo", "Logo principal", "principal", "color", ["svg", "png", "jpg", "pdf", "psd"], 2400),
   logoItem("logo-vertical", "Logo vertical", "vertical", "color", ["svg", "png", "pdf"], 1600),
   logoItem("logo-blanco", "Logo en blanco (fondos oscuros)", "principal", "blanco", ["svg", "png", "pdf"], 2400),
   logoItem("logo-un-color", "Logo a un color", "principal", "mono", ["svg", "png", "pdf"], 2400),
   logoItem("isotipo", "Isotipo (solo el símbolo)", "isotipo", "color", ["svg", "png", "pdf"], 1200),
-  logoItem("sello", "Sello", "sello", "mono", ["svg", "png", "pdf"], 1200),
+  logoItem("sello", "Sello redondo", "sello", "color", ["svg", "png", "pdf"], 1200),
   { id: "icono-app", label: "Ícono (app, favicon)", group: "Logo", formats: ["png"], px: 1024, art: iconoAppArt },
   { id: "perfil", label: "Foto de perfil", group: "Redes sociales", formats: ["png", "jpg", "psd"], px: 1000, art: perfilArt },
   { id: "portada", label: "Portada de Facebook", group: "Redes sociales", formats: ["png", "jpg", "psd"], px: 1640, art: portadaArt },
@@ -80,7 +82,8 @@ export const ITEMS: Item[] = [
   { id: "bolsa", label: "Bolsa", group: "Mockups", formats: ["png", "jpg"], px: 1200, art: bolsaArt },
   { id: "vehiculo", label: "Vehículo de reparto", group: "Mockups", formats: ["png", "jpg"], px: 1600, art: vehiculoArt },
   { id: "chat", label: "Chat de WhatsApp", group: "Mockups", formats: ["png"], px: 1000, art: (c) => chatArt(c, welcomeFor(c)) },
-  { id: "patron", label: "Patrón de marca", group: "Colores y patrón", formats: ["svg", "png"], px: 2000 },
+  { id: "fondo-oscuro", label: "Fondo de marca (oscuro)", group: "Colores y patrón", formats: ["svg", "png"], px: 2400, art: async (c) => fondoArt(c, "oscuro") },
+  { id: "fondo-claro", label: "Fondo de marca (claro)", group: "Colores y patrón", formats: ["svg", "png"], px: 2400, art: async (c) => fondoArt(c, "claro") },
   { id: "colores", label: "Paleta de colores (Adobe .ase y texto)", group: "Colores y patrón", formats: ["ase", "txt"], px: 0 },
 ];
 
@@ -217,18 +220,8 @@ function paletteList(c: BrandCtx) {
   ];
 }
 
-function patronArt(c: BrandCtx, size: number, tile: number): Art {
-  const p = kitPalette(c.kit);
-  let tiles = "";
-  for (let y = 0; y < size; y += tile) for (let x = 0; x < size; x += tile) tiles += `<g transform="translate(${x} ${y})">${patternTile(c.kit, tile, p.primary)}</g>`;
-  return {
-    width: size,
-    height: size,
-    layers: [
-      { name: "Fondo", svg: `<rect width="${size}" height="${size}" fill="${p.light}"/>` },
-      { name: "Patrón", svg: `<g opacity="0.35">${tiles}</g>` },
-    ],
-  };
+function fondoArt(c: BrandCtx, tone: "oscuro" | "claro"): Art {
+  return { width: 1600, height: 1000, layers: [{ name: "Fondo", svg: backdropSvg(c.kit, 1600, 1000, tone) }] };
 }
 
 async function toDocx(c: BrandCtx) {
@@ -289,10 +282,6 @@ export async function brandFile(c: BrandCtx, item: Item, format: Format): Promis
       const list = paletteList(c);
       if (format === "ase") return toAse(list);
       return list.map((x) => `${x.name}\tHEX ${x.hex}\tRGB ${rgbText(x.hex)}\tCMYK ${cmykText(x.hex)}`).join("\n") + "\n";
-    }
-    if (item.id === "patron") {
-      if (format === "svg") return artSvg(patronArt(c, 480, 120));
-      return toPng(patronArt(c, 2000, 200), item.px);
     }
     if (format === "docx") return toDocx(c);
     const arts = await item.art!(c);

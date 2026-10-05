@@ -1,29 +1,22 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
-import { BrandLogo } from "@/components/brand-logo";
-import { Fit } from "@/components/fit";
 import { SubmitButton } from "@/components/submit-button";
 import { Button, PageTitle } from "@/components/ui";
 import {
   FONT_PAIRS,
-  LAYOUTS,
-  fontsById,
   googleFontsHref,
-  gradientCss,
   iconsFor,
-  kitPalette,
   palettesFor,
-  patternCss,
   storedKit,
   storedOptions,
-  type BrandKit,
 } from "@/lib/brand";
 import { FORMAT_LABEL, ITEMS, ZIP_NAME, type Group } from "@/lib/brand-files";
 import { brandKitPrice } from "@/lib/brand-store";
 import { publicAssetUrl, requireBusiness } from "@/lib/business";
-import { chooseKit, generateKits, purchaseKit, rewriteBase, saveBrand } from "./actions";
+import { generateKits, purchaseKit, rewriteBase, saveBrand } from "./actions";
 import { KitEditor } from "./kit-editor";
+import { Proposal } from "./proposal-card";
 import { Uploader } from "./uploader";
 
 // Elegir una propuesta hace que Nuna escriba la base de marca (puede tardar).
@@ -44,77 +37,26 @@ const OPTIONS = [
 ];
 
 const INCLUDES = [
-  "Logo en 4 versiones + isotipo y sello, en SVG, PNG, JPG, PDF para Illustrator y PSD para Photoshop",
+  "Tablero de marca para presentar tu identidad, como lo hacen las agencias",
+  "Logo en todas sus versiones + símbolo y sello, en SVG, PNG, JPG, PDF para Illustrator y PSD para Photoshop",
   "Base de marca: historia, misión, visión, valores, cliente ideal, promesa y forma de hablar",
   "Textos listos: bio para redes, descripción para Google y WhatsApp, mensaje de bienvenida, hashtags e ideas de publicaciones",
   "Redes sociales: foto de perfil, portada, publicación e historia (también en PSD por capas)",
   "Papelería para imprenta: tarjeta de presentación, hoja membretada (PDF y Word), cotización y volante",
   "Cómo se ve tu marca: letrero del local, camiseta, bolsa, vehículo y chat de WhatsApp",
-  "Paleta de colores para Adobe, patrón de marca y manual de marca completo",
+  "Paleta de colores para Adobe, fondos de marca y manual de marca completo",
   "Tu página web con tus colores, tus letras y tu logo",
 ];
 
-const GROUPS: Group[] = ["Logo", "Redes sociales", "Papelería", "Mockups", "Colores y patrón"];
+const GROUPS: Group[] = ["Presentación", "Logo", "Redes sociales", "Papelería", "Mockups", "Colores y patrón"];
 const GROUP_LABEL: Record<Group, string> = {
+  Presentación: "Presentación",
   Logo: "Logo",
   "Redes sociales": "Redes sociales",
   Papelería: "Papelería",
   Mockups: "Tu marca en la vida real",
-  "Colores y patrón": "Colores y patrón",
+  "Colores y patrón": "Colores y fondos",
 };
-
-function Proposal({ kit, name, index, selected }: { kit: BrandKit; name: string; index: number; selected: boolean }) {
-  const p = kitPalette(kit);
-  const f = fontsById(kit.fonts);
-  return (
-    <article className={`flex flex-col gap-4 rounded-2xl border bg-panel p-5 ${selected ? "border-lime" : "border-line"}`}>
-      <div
-        className="flex min-h-40 items-center justify-center overflow-hidden rounded-xl p-4"
-        style={{ background: p.light, backgroundImage: patternCss(kit, p.primary, 0.06, 48) }}
-      >
-        <Fit>
-          <BrandLogo kit={kit} name={name} size={kit.layout === "emblema" ? 56 : 44} />
-        </Fit>
-      </div>
-      <div
-        className="flex min-h-20 items-center justify-center gap-3 rounded-xl px-4"
-        style={{ backgroundImage: `${patternCss(kit, "#FFFFFF", 0.12, 40)}, ${gradientCss(p)}` }}
-        aria-hidden
-      >
-        <BrandLogo kit={kit} name={name} variant="isotipo" theme="blanco" size={36} />
-        <span className="text-sm font-semibold text-white" style={{ fontFamily: `"${f.heading.family}"`, fontWeight: f.heading.weight }}>
-          {kit.slogan}
-        </span>
-      </div>
-      <div className="flex gap-1.5" aria-label="Colores">
-        {[p.primary, p.secondary, p.accent, p.dark, p.light].map((c, i) => (
-          <span key={i} className="h-6 flex-1 rounded-md border border-line" style={{ background: c }} />
-        ))}
-      </div>
-      <div className="flex flex-col gap-1">
-        <h3 className="font-display text-xl font-bold">{kit.name}</h3>
-        <p className="text-sm text-muted">{kit.concept}</p>
-      </div>
-      <p className="text-lg" style={{ fontFamily: `"${f.heading.family}"`, fontWeight: f.heading.weight }}>
-        “{kit.slogan}”
-      </p>
-      <p className="text-sm text-muted">
-        {LAYOUTS.find((l) => l.id === kit.layout)?.label} · letra {f.name.toLowerCase()} · {kit.personality.join(" · ")}
-      </p>
-      <form action={chooseKit.bind(null, index)} className="mt-auto">
-        {selected ? (
-          <Button type="button" variant="ghost" disabled className="w-full">
-            ✓ Elegida
-          </Button>
-        ) : (
-          <SubmitButton pendingText="Nuna está escribiendo tu marca…" className="w-full">
-            Elegir esta
-          </SubmitButton>
-        )}
-      </form>
-    </article>
-  );
-}
 
 function BaseItem({ title, children }: { title: string; children: ReactNode }) {
   return (

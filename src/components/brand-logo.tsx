@@ -3,14 +3,19 @@ import {
   escapeXml,
   fontsById,
   initials,
+  isModernMark,
   isotypeSvg,
   kitPalette,
   logoName,
+  markChar,
   markSvg,
+  mixHex,
+  nameTracking,
   onColor,
   splitName,
   type BrandKit,
 } from "@/lib/brand";
+import { modernMark } from "@/lib/brand-marks";
 
 // Logo de un kit de marca para mostrar en pantalla, en sus 4 estilos (clásico, apilado, emblema y
 // solo nombre). La tipografía se carga con googleFontsHref(); las descargas usan lib/brand-render.ts
@@ -41,7 +46,9 @@ function emblemSvg(kit: BrandKit, name: string, theme: Theme) {
     ? `<circle cx="120" cy="120" r="120" fill="${bg}"/>`
     : `<circle cx="120" cy="120" r="117" fill="none" stroke="#FFFFFF" stroke-width="6"/>`;
   const scale = kit.monogram ? 0.62 : 0.78;
-  const mark = `<g transform="translate(72 72)">${markSvg(kit, 96, ink, { initials: initials(name), scale })}</g>`;
+  const mark = isModernMark(kit.mark)
+    ? `<g transform="translate(80 80) scale(0.8)">${modernMark(kit.mark, { a: ink, b: mixHex(ink, bg, 0.4), c: mixHex(ink, bg, 0.2), on: filled ? bg : p.primary }, { icon: kit.icon, letter: { char: markChar(name), family: f.heading.family, weight: f.heading.weight } })}</g>`
+    : `<g transform="translate(72 72)">${markSvg(kit, 96, ink, { initials: initials(name), scale })}</g>`;
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="100%" height="100%">` +
     `<defs><path id="ob-arc-top" d="M28 120 A92 92 0 0 1 212 120"/><path id="ob-arc-bottom" d="M9 120 A111 111 0 0 0 231 120"/></defs>` +
@@ -97,7 +104,7 @@ export function BrandLogo({
     fontFamily: `"${f.heading.family}", system-ui, sans-serif`,
     fontWeight: f.heading.weight,
     lineHeight: 1.05,
-    letterSpacing: upper ? "0.04em" : undefined,
+    letterSpacing: `${nameTracking(kit)}em`,
     color: ink.name,
     whiteSpace: "nowrap",
   };
@@ -131,14 +138,14 @@ export function BrandLogo({
 
   if (variant === "isotipo") return <Svg html={iso} size={size} label={`Símbolo de ${name}`} />;
   if (variant === "sello" || (variant === "principal" && kit.layout === "emblema" && !compact)) {
-    return <Svg html={emblemSvg(kit, name, variant === "sello" && theme === "color" ? "mono" : theme)} size={size * 2} label={label} />;
+    return <Svg html={emblemSvg(kit, name, theme)} size={size * 2} label={label} />;
   }
 
-  if (variant === "vertical") {
+  if (variant === "vertical" || (variant === "principal" && kit.layout === "centrado" && !compact)) {
     return (
       <span role="img" aria-label={label} className={`inline-flex flex-col items-center text-center ${className}`} style={{ gap: size * 0.2 }}>
         <Svg html={iso} size={size} />
-        <span style={{ ...nameStyle, fontSize: size * 0.45 }}>{twoTone(text)}</span>
+        <span style={{ ...nameStyle, fontSize: size * 0.48 }}>{twoTone(text)}</span>
         {captionEl(size * 0.13)}
       </span>
     );
@@ -174,7 +181,7 @@ export function BrandLogo({
   return (
     <span role="img" aria-label={label} className={`inline-flex items-center ${className}`} style={{ gap: size * 0.25 }}>
       <Svg html={iso} size={size} />
-      <span style={{ ...nameStyle, fontSize: size * (upper ? 0.46 : 0.52) }}>{twoTone(text)}</span>
+      <span style={{ ...nameStyle, fontSize: size * (upper ? 0.43 : 0.53) }}>{twoTone(text)}</span>
     </span>
   );
 }

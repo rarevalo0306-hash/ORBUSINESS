@@ -3,8 +3,9 @@ import { z } from "zod";
 import {
   FONT_PAIRS,
   LAYOUTS,
+  MARKS,
+  NAME_STYLES,
   PATTERNS,
-  SHAPES,
   captionFor,
   iconsFor,
   rulesBase,
@@ -45,8 +46,7 @@ const KitSchema = z.object({
   colors: z.object({ primary: Hex, secondary: Hex, accent: Hex, dark: Hex, light: Hex }).partial(),
   fonts: z.string(),
   icon: z.string(),
-  shape: z.string(),
-  monogram: z.boolean(),
+  mark: z.string(),
   layout: z.string(),
   nameStyle: z.string(),
   pattern: z.string(),
@@ -59,34 +59,37 @@ export async function proposeKits(b: Business, services: { name: string }[]): Pr
 
   const out = await aiJson({
     system:
-      "Eres Nuna, directora creativa de Orbusiness. Diseñas identidades de marca para negocios pequeños de Latinoamérica y EE.UU. " +
-      "Propón 3 identidades MUY distintas entre sí, cada una con una idea creativa propia (no solo 'moderna', 'clásica', 'cercana'): " +
-      "juega con el nombre, la historia del barrio, el oficio, la cultura y las palabras del país. Evita lo genérico " +
-      "('calidad y buen servicio', 'los mejores precios', 'tu mejor opción'). " +
-      "El eslogan es corto (máximo 7 palabras), memorable, con ritmo; puede tener rima o juego de palabras; va dirigido a los clientes " +
+      "Eres Nuna, directora creativa de Orbusiness. Diseñas identidades de marca MODERNAS para negocios pequeños de Latinoamérica y EE.UU., " +
+      "al nivel de un estudio de diseño actual (2025-2026): minimalismo, mucho espacio, símbolos geométricos simples, letra protagonista " +
+      "con interletrado ajustado, nombres en minúsculas o normales, paletas sofisticadas (tonos tierra, verdes profundos, tintas oscuras, " +
+      "cremas) con UN acento vivo, y fondos con degradados suaves o formas grandes. Nada de escudos, sellos antiguos, clip-art, sombras, " +
+      "biseles, letras cursivas de los 90 ni combinaciones de colores primarios chillones (rojo + amarillo + azul puros). " +
+      "Propón 3 identidades MUY distintas entre sí, cada una con una idea creativa propia: juega con el nombre, la inicial, el oficio, " +
+      "el barrio y la cultura del país, pero con estética moderna y limpia (piensa en marcas actuales de café de especialidad, " +
+      "tiendas de diseño o startups, aunque sea una pulpería o una ferretería). Evita lo genérico ('calidad y buen servicio', 'los mejores precios'). " +
+      "El eslogan es corto (máximo 6 palabras), moderno, directo y con ritmo; va dirigido a los clientes " +
       `con el trato de ${formOf(b)}; sin comillas. Escribe en el español natural del país. ` +
-      "Inventa una paleta original para cada propuesta (5 colores HEX): primary (el color de la marca, debe ser intenso u oscuro para que el texto blanco se lea encima), " +
-      "secondary, accent (contraste vivo), dark (casi negro, con un toque del color) y light (fondo muy claro, casi blanco). " +
+      "Inventa una paleta moderna para cada propuesta (5 colores HEX): primary (color de marca profundo, el texto blanco debe leerse encima), " +
+      "secondary (tono suave que combine), accent (un acento vivo y actual), dark (casi negro con un toque del color) y light (fondo cálido casi blanco). " +
       "Las 3 paletas deben ser claramente distintas. " +
-      "Combina estilo de logo, forma, letra, estilo del nombre y patrón para que cada propuesta se sienta única. " +
-      "Usa SOLO los id de las listas para letra, ícono, forma, estilo de logo y patrón. " +
-      "monogram=true usa las iniciales del negocio en vez del ícono. caption es el texto pequeño del logo (por ejemplo 'Ferretería · Managua'), máximo 30 letras; no inventes años ni datos.",
+      "Usa SOLO los id de las listas para letra, símbolo, ícono, estilo de logo, estilo del nombre y fondo. " +
+      "caption es el texto pequeño del logo (por ejemplo 'Ferretería · Managua'), máximo 30 letras; no inventes años ni datos.",
     user: [
       businessBrief(b, services),
       "",
       `Letras (id: estilo): ${FONT_PAIRS.map((f) => `${f.id}: ${f.mood}`).join("; ")}.`,
-      `Íconos (id): ${icons.join(", ")}.`,
-      `Formas: ${SHAPES.map((s) => `${s.id} (${s.label})`).join(", ")}.`,
+      `Símbolos (id: descripción): ${MARKS.map((m) => `${m.id}: ${m.label}`).join("; ")}.`,
+      `Íconos (solo para los símbolos icono-*): ${icons.join(", ")}.`,
       `Estilos de logo: ${LAYOUTS.map((l) => `${l.id} (${l.note})`).join(", ")}.`,
-      `Estilos del nombre: normal, mayusculas, dos-tonos (la segunda parte del nombre en el color de la marca).`,
-      `Patrones: ${PATTERNS.map((p) => `${p.id} (${p.label})`).join(", ")}.`,
+      `Estilos del nombre: ${NAME_STYLES.map((n) => n.id).join(", ")} (dos-tonos = la segunda parte del nombre en el color de la marca).`,
+      `Fondos: ${PATTERNS.map((p) => `${p.id} (${p.label})`).join(", ")}.`,
     ].join("\n"),
     schema: KitsSchema,
     jsonHint:
       'Formato: {"kits": [{"name": "nombre corto y creativo de la propuesta", "concept": "la idea creativa y por qué le funciona a este negocio (2 oraciones)", ' +
       '"proposition": "propuesta de valor (1 oración)", "personality": ["3 adjetivos"], "tone": "tono de voz (1 oración)", "slogan": "eslogan", ' +
       '"caption": "Giro · Zona", "colors": {"primary": "#1F3A5F", "secondary": "#F2A900", "accent": "#E4572E", "dark": "#14202E", "light": "#F5F3EE"}, ' +
-      '"fonts": "id", "icon": "id", "shape": "id", "monogram": false, "layout": "id", "nameStyle": "id", "pattern": "id"}, ...]} con exactamente 3 kits.',
+      '"fonts": "id", "mark": "id", "icon": "id", "layout": "id", "nameStyle": "id", "pattern": "id"}, ...]} con exactamente 3 kits.',
     maxTokens: 3000,
     temperature: 1.1,
   });
