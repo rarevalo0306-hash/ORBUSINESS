@@ -3,7 +3,7 @@
 // si no, o si la IA falla, entiende las respuestas con las reglas de este archivo.
 
 import type { Database } from "@/lib/database.types";
-import { AVAILABILITY, MARKETS, findMarket, isActiveMarket, marketFor, normalizePhone, type AddressForm } from "@/lib/markets";
+import { AVAILABILITY, MARKETS, findMarket, isActiveMarket, marketFor, normalizePhone, say, type AddressForm } from "@/lib/markets";
 
 export type BusinessRow = Database["public"]["Tables"]["businesses"]["Row"];
 export type BusinessPatch = Database["public"]["Tables"]["businesses"]["Update"];
@@ -30,7 +30,30 @@ export type QuestionKey =
   | "address_form"
   | "quote_requires_approval";
 
-type B = Pick<BusinessRow, "business_type" | "country_code">;
+type B = Pick<BusinessRow, "business_type" | "country_code"> & Partial<Pick<BusinessRow, "industry">>;
+
+// Trato con el dueño durante la entrevista: el habitual de su país (antes de saber el país, tú).
+export function ownerForm(b: Pick<BusinessRow, "country_code">): AddressForm {
+  return marketFor(b.country_code)?.addressForm ?? "tu";
+}
+const t3 = (b: B, v: { tu: string; usted: string; vos: string }) => say(ownerForm(b), v);
+
+// Ejemplos de productos o servicios según el giro, para que contestar sea fácil.
+const OFFERING_EXAMPLES: [string[], string][] = [
+  [["ferreter"], "herramientas, pintura, plomería, electricidad, materiales de construcción"],
+  [["pulper", "abarrot", "minisuper", "supermercado", "bodega", "colmado"], "abarrotes, bebidas, golosinas, productos de limpieza"],
+  [["farmac"], "medicamentos, cuidado personal, productos para bebé"],
+  [["panader", "reposter"], "pan, pasteles, repostería por encargo"],
+  [["ropa", "boutique", "zapater"], "ropa de dama, de caballero, de niños, zapatos"],
+  [["salon", "estetica", "barber"], "corte, tinte, uñas, peinados"],
+  [["taller", "mecan"], "cambio de aceite, frenos, alineado y balanceo"],
+  [["jardin"], "corte de pasto 45, poda 80"],
+  [["restaurante", "comedor", "fritanga", "taqueria", "cafeter"], "platos del día, bebidas, comida para llevar"],
+];
+function offeringExample(b: B): string | null {
+  const t = norm(b.industry ?? "");
+  return OFFERING_EXAMPLES.find(([keys]) => keys.some((k) => t.includes(k)))?.[1] ?? null;
+}
 const sells = (b: B) => b.business_type === "products" || b.business_type === "both";
 const serves = (b: B) => b.business_type !== "products"; // servicios, ambos, o aún no se sabe
 
@@ -85,7 +108,12 @@ export const QUESTIONS: Question[] = [
   {
     key: "business_type",
     label: "Tipo de negocio",
-    text: () => "¿Vendes productos, das servicios, o las dos cosas?",
+    text: (b) =>
+      t3(b, {
+        tu: "¿Vendes productos, das servicios, o las dos cosas?",
+        usted: "¿Vende productos, da servicios, o las dos cosas?",
+        vos: "¿Vendés productos, das servicios, o las dos cosas?",
+      }),
     hint: () => "business_type: products (vende artículos, tienda), services (hace trabajos), both (las dos cosas).",
   },
   {
@@ -97,12 +125,27 @@ export const QUESTIONS: Question[] = [
   {
     key: "offerings",
     label: "Productos o servicios",
-    text: (b) =>
-      b.business_type === "products"
-        ? "¿Qué tipo de productos vendes? Si quieres, dime el precio de los más pedidos."
-        : b.business_type === "both"
-          ? "¿Qué productos y servicios ofreces? Si tienes precios, inclúyelos."
-          : "¿Qué servicios das y cuánto cobras por cada uno?",
+    text: (b) => {
+      const ex = offeringExample(b);
+      const example = ex ? ` Por ejemplo: ${ex}.` : "";
+      if (b.business_type === "products")
+        return t3(b, {
+          tu: `¿Qué tipo de productos vendes?${example} Si quieres, dime el precio de los más pedidos.`,
+          usted: `¿Qué tipo de productos vende?${example} Si quiere, dígame el precio de los más pedidos.`,
+          vos: `¿Qué tipo de productos vendés?${example} Si querés, decime el precio de los más pedidos.`,
+        });
+      if (b.business_type === "both")
+        return t3(b, {
+          tu: `¿Qué productos y servicios ofreces?${example} Si tienes precios, inclúyelos.`,
+          usted: `¿Qué productos y servicios ofrece?${example} Si tiene precios, inclúyalos.`,
+          vos: `¿Qué productos y servicios ofrecés?${example} Si tenés precios, incluilos.`,
+        });
+      return t3(b, {
+        tu: `¿Qué servicios das y cuánto cobras por cada uno?${example}`,
+        usted: `¿Qué servicios da y cuánto cobra por cada uno?${example}`,
+        vos: `¿Qué servicios das y cuánto cobrás por cada uno?${example}`,
+      });
+    },
     hint: () =>
       "Lista de productos o categorías de productos y/o servicios. Precio solo si el dueño lo dijo (número en su moneda); si no, null. Si describe la tienda en general, resume en 3 a 6 categorías claras.",
   },
@@ -111,7 +154,12 @@ export const QUESTIONS: Question[] = [
     label: "Moneda de tus precios",
     text: (b) => {
       const m = marketFor(b.country_code)!;
-      return `¿Tus precios los manejas en ${currencyName(m.currency)}, en ${currencyName(m.secondCurrency!)}, o en los dos?`;
+      const options = `en ${currencyName(m.currency)}, en ${currencyName(m.secondCurrency!)}, o en los dos?`;
+      return t3(b, {
+        tu: `¿Tus precios los manejas ${options}`,
+        usted: `¿Sus precios los maneja ${options}`,
+        vos: `¿Tus precios los manejás ${options}`,
+      });
     },
     hint: (b) => {
       const m = marketFor(b.country_code);
@@ -122,13 +170,23 @@ export const QUESTIONS: Question[] = [
   {
     key: "hours",
     label: "Horario",
-    text: () => "¿Qué días y horas abres o trabajas?",
+    text: (b) =>
+      t3(b, {
+        tu: "¿Qué días y a qué horas abres o trabajas? Por ejemplo: lunes a sábado de 8 am a 6 pm.",
+        usted: "¿Qué días y a qué horas abre o trabaja? Por ejemplo: lunes a sábado de 8 am a 6 pm.",
+        vos: "¿Qué días y a qué horas abrís o trabajás? Por ejemplo: lunes a sábado de 8 am a 6 pm.",
+      }),
     hint: () => "Días y horario.",
   },
   {
     key: "phone",
     label: "WhatsApp del negocio",
-    text: () => "¿Cuál es el número de WhatsApp o teléfono del negocio? Ahí te van a escribir tus clientes.",
+    text: (b) =>
+      t3(b, {
+        tu: "¿Cuál es el número de WhatsApp o teléfono del negocio? Ahí te van a escribir tus clientes.",
+        usted: "¿Cuál es el número de WhatsApp o teléfono del negocio? Ahí le van a escribir sus clientes.",
+        vos: "¿Cuál es el número de WhatsApp o teléfono del negocio? Ahí te van a escribir tus clientes.",
+      }),
     hint: () => "text_value = el número tal como lo dijo, con o sin código de país.",
   },
   {
@@ -136,10 +194,15 @@ export const QUESTIONS: Question[] = [
     label: "Dirección",
     text: (b) => {
       const m = marketFor(b.country_code);
-      if (!m) return "¿Cuál es la dirección del negocio? Dímela como se la das a tus clientes.";
+      const how = t3(b, {
+        tu: "Dímela como se la das a tus clientes",
+        usted: "Dígamela como se la da a sus clientes",
+        vos: "Decímela como se la das a tus clientes",
+      });
+      if (!m) return `¿Cuál es la dirección del negocio? ${how}.`;
       const example = m.addressStyle.match(/\(por ejemplo:?\s*([^)]*)\)/i)?.[1];
       const style = m.addressStyle.replace(/\s*\(por ejemplo[^)]*\)/i, "");
-      return `¿Cuál es la dirección del negocio? Dímela como se la das a tus clientes, con ${style}.${example ? ` Por ejemplo: ${example}.` : ""}`;
+      return `¿Cuál es la dirección del negocio? ${how}, con ${style}.${example ? ` Por ejemplo: ${example}.` : ""}`;
     },
     hint: () => "text_value = la dirección tal como la daría a un cliente, con sus puntos de referencia.",
     applies: sells,
@@ -147,14 +210,23 @@ export const QUESTIONS: Question[] = [
   {
     key: "lead_sources",
     label: "Cómo llegan los clientes",
-    text: () =>
-      "Ahora cuéntame cómo trabajas, así armo tu CRM a tu medida. ¿Cómo te llegan normalmente los clientes nuevos?",
+    text: (b) =>
+      t3(b, {
+        tu: "Ahora cuéntame cómo trabajas, así armo tu CRM a tu medida. ¿Cómo te llegan normalmente los clientes nuevos?",
+        usted: "Ahora cuénteme cómo trabaja, así armo su CRM a su medida. ¿Cómo le llegan normalmente los clientes nuevos?",
+        vos: "Ahora contame cómo trabajás, así armo tu CRM a tu medida. ¿Cómo te llegan normalmente los clientes nuevos?",
+      }),
     hint: () => "Por dónde llegan los clientes nuevos (redes, llamadas, recomendación, pasan por el local…).",
   },
   {
     key: "visit_before_quote",
     label: "Antes de cotizar",
-    text: () => "Cuando te piden un trabajo, ¿vas a verlo antes de dar precio, o cotizas directo?",
+    text: (b) =>
+      t3(b, {
+        tu: "Cuando te piden un trabajo, ¿vas a verlo antes de dar precio, o cotizas directo?",
+        usted: "Cuando le piden un trabajo, ¿va a verlo antes de dar precio, o cotiza directo?",
+        vos: "Cuando te piden un trabajo, ¿vas a verlo antes de dar precio, o cotizás directo?",
+      }),
     hint: () => "bool_value: true si visita o revisa antes de cotizar; false si cotiza directo o no aplica.",
     applies: serves,
   },
@@ -163,10 +235,22 @@ export const QUESTIONS: Question[] = [
     label: "Cómo cobra",
     text: (b) =>
       b.business_type === "products"
-        ? "¿Cómo te pagan tus clientes: al momento de la compra, con apartado, o a crédito?"
+        ? t3(b, {
+            tu: "¿Cómo te pagan tus clientes: al momento de la compra, con apartado, o a crédito?",
+            usted: "¿Cómo le pagan sus clientes: al momento de la compra, con apartado, o a crédito?",
+            vos: "¿Cómo te pagan tus clientes: al momento de la compra, con apartado, o a crédito?",
+          })
         : b.business_type === "both"
-          ? "¿Cómo te pagan: al momento, con anticipo o apartado, al terminar el trabajo, o a crédito?"
-          : "¿Cuándo cobras: antes de empezar, con anticipo, o cuando terminas el trabajo?",
+          ? t3(b, {
+              tu: "¿Cómo te pagan: al momento, con anticipo o apartado, al terminar el trabajo, o a crédito?",
+              usted: "¿Cómo le pagan: al momento, con anticipo o apartado, al terminar el trabajo, o a crédito?",
+              vos: "¿Cómo te pagan: al momento, con anticipo o apartado, al terminar el trabajo, o a crédito?",
+            })
+          : t3(b, {
+              tu: "¿Cuándo cobras: antes de empezar, con anticipo, o cuando terminas el trabajo?",
+              usted: "¿Cuándo cobra: antes de empezar, con anticipo, o cuando termina el trabajo?",
+              vos: "¿Cuándo cobrás: antes de empezar, con anticipo, o cuando terminás el trabajo?",
+            }),
     hint: () =>
       "payment_timing: at_sale (paga al momento de la compra), deposit (anticipo o apartado), credit (a crédito o fiado), before (antes de empezar un trabajo), after (al terminar un trabajo). Elige la que más se use.",
   },
@@ -175,14 +259,15 @@ export const QUESTIONS: Question[] = [
     label: "Formas de pago",
     text: (b) => {
       const m = marketFor(b.country_code);
-      return `¿Qué formas de pago aceptas? Por ejemplo: ${(m?.paymentMethods ?? ["Efectivo", "Transferencia", "Tarjeta"]).join(", ")}.`;
+      const ask = t3(b, { tu: "¿Qué formas de pago aceptas?", usted: "¿Qué formas de pago acepta?", vos: "¿Qué formas de pago aceptás?" });
+      return `${ask} Por ejemplo: ${(m?.paymentMethods ?? ["Efectivo", "Transferencia", "Tarjeta"]).join(", ")}.`;
     },
     hint: () => "payment_methods = lista de formas de pago que mencionó, con su nombre local (Yape, SINPE Móvil, Nequi, OXXO…).",
   },
   {
     key: "offers_delivery",
     label: "Entregas a domicilio",
-    text: () => "¿Haces entregas a domicilio?",
+    text: (b) => t3(b, { tu: "¿Haces entregas a domicilio?", usted: "¿Hace entregas a domicilio?", vos: "¿Hacés entregas a domicilio?" }),
     hint: () => "bool_value: true si entrega a domicilio o hace envíos; false si no.",
     applies: sells,
   },
@@ -191,8 +276,16 @@ export const QUESTIONS: Question[] = [
     label: "Clientes frecuentes",
     text: (b) =>
       sells(b)
-        ? "¿Tienes clientes que te compran seguido, como contratistas u otros negocios?"
-        : "¿Tienes clientes que repiten cada semana o cada mes?",
+        ? t3(b, {
+            tu: "¿Tienes clientes que te compran seguido, como contratistas u otros negocios?",
+            usted: "¿Tiene clientes que le compran seguido, como contratistas u otros negocios?",
+            vos: "¿Tenés clientes que te compran seguido, como contratistas u otros negocios?",
+          })
+        : t3(b, {
+            tu: "¿Tienes clientes que repiten cada semana o cada mes?",
+            usted: "¿Tiene clientes que repiten cada semana o cada mes?",
+            vos: "¿Tenés clientes que repiten cada semana o cada mes?",
+          }),
     hint: () => "bool_value: true si tiene clientes frecuentes o recurrentes.",
   },
   {
@@ -200,21 +293,35 @@ export const QUESTIONS: Question[] = [
     label: "Trato con tus clientes",
     text: (b) => {
       const m = marketFor(b.country_code);
-      return `¿Cómo quieres que les hable a tus clientes: de tú, de usted o de vos?${m ? ` En ${m.name} lo más común es ${FORM_NAMES[m.addressForm]}.` : ""}`;
+      const ask = t3(b, {
+        tu: "¿Cómo quieres que les hable a tus clientes: de tú, de usted o de vos?",
+        usted: "¿Cómo quiere que les hable a sus clientes: de tú, de usted o de vos?",
+        vos: "¿Cómo querés que les hable a tus clientes: de tú, de usted o de vos?",
+      });
+      return `${ask}${m ? ` En ${m.name} lo más común es ${FORM_NAMES[m.addressForm]}.` : ""}`;
     },
     hint: () => "address_form: tu, usted o vos. Si le da igual, usa el trato habitual del país.",
   },
   {
     key: "quote_requires_approval",
     label: "Cotizaciones",
-    text: () =>
-      "Última: cuando un cliente pida precio o cotización, ¿quieres revisarla antes de que la mande, o la mando yo sola?",
+    text: (b) =>
+      t3(b, {
+        tu: "Última: cuando un cliente pida precio o cotización, ¿quieres revisarla antes de que la mande, o la mando yo sola?",
+        usted: "Última: cuando un cliente pida precio o cotización, ¿quiere revisarla antes de que la mande, o la mando yo sola?",
+        vos: "Última: cuando un cliente pida precio o cotización, ¿querés revisarla antes de que la mande, o la mando yo sola?",
+      }),
     hint: () => "bool_value: true si el dueño quiere revisar antes de enviar; false si Nuna las manda sola.",
   },
 ];
 
-export const CLOSING = (owner: string | null) =>
-  `Listo${owner ? `, ${owner}` : ""}. Ya entendí tu negocio y cómo trabajas. Siguiente paso: si tienes logo, fotos o página web, pásamelos; si no, yo me encargo.`;
+export const CLOSING = (owner: string | null, b: Pick<BusinessRow, "country_code">) =>
+  `Listo${owner ? `, ${owner}` : ""}. ` +
+  say(ownerForm(b), {
+    tu: "Ya entendí tu negocio y cómo trabajas. Siguiente paso: si tienes logo, fotos o página web, pásamelos; si no, yo me encargo.",
+    usted: "Ya entendí su negocio y cómo trabaja. Siguiente paso: si tiene logo, fotos o página web, pásemelos; si no, yo me encargo.",
+    vos: "Ya entendí tu negocio y cómo trabajás. Siguiente paso: si tenés logo, fotos o página web, pasámelos; si no, yo me encargo.",
+  });
 
 export function questionIndex(key: string | null): number {
   return QUESTIONS.findIndex((q) => q.key === key);
@@ -252,7 +359,7 @@ export function missingQuestions(b: BusinessRow, services: ServiceInput[], answe
 export function withoutQuestions(ack: string): string {
   const kept = ack
     .split(/(?<=[.!?])\s+/)
-    .filter((sentence) => !sentence.includes("?") && !sentence.includes("¿"));
+    .filter((sentence) => !sentence.includes("?") && !sentence.includes("¿") && !/confirm/i.test(sentence));
   return kept.join(" ").trim() || "Anotado.";
 }
 

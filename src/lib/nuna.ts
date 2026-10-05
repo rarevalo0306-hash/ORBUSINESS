@@ -6,6 +6,7 @@ import { marketContext, marketFor, normalizePhone } from "@/lib/markets";
 import {
   currencyPatch,
   locationCheck,
+  ownerForm,
   withoutQuestions,
   questionFor,
   extractWithRules,
@@ -71,6 +72,8 @@ const SYSTEM =
   "Entiende las palabras y costumbres del país del negocio (por ejemplo, en Nicaragua 'pesos' son córdobas y 'fiado' es crédito). " +
   "En reply habla en español natural de ese país, cálido y breve; nunca uses 'vosotros'. " +
   "Si el dueño menciona de paso el nombre de su negocio, ponlo en business_name. " +
+  "Si el dato es ambiguo (por ejemplo, un horario sin am o pm, o 'los dos' sin decir cuáles), marca understood=false y en reply pregunta solo eso. " +
+  "Si el dueño dice varias opciones (por ejemplo, 'los tres'), elige la más común y no repreguntes. " +
   "En reply no digas que anotaste datos distintos del que se pidió (excepto el nombre del negocio).";
 
 function userPrompt(key: QuestionKey, answer: string, b: B) {
@@ -82,7 +85,9 @@ function userPrompt(key: QuestionKey, answer: string, b: B) {
     b.industry ? `Giro: ${b.industry}` : null,
     b.owner_name ? `Dueño: ${b.owner_name}` : null,
   ].filter(Boolean);
+  const form = { tu: "tú", usted: "usted", vos: "vos" }[ownerForm(b)];
   return (
+    `Háblale al dueño de ${form}.\n` +
     `${known.length ? `Lo que ya sabes del negocio (úsalo, no lo vuelvas a preguntar): ${known.join("; ")}.\n` : ""}` +
     `${market ? `${market}\n` : ""}` +
     `${kind ? `Tipo de negocio: ${kind}.\n` : ""}` +

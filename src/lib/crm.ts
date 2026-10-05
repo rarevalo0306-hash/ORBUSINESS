@@ -15,12 +15,19 @@ type Workflow = Pick<
   | "offers_delivery"
   | "industry"
   | "country_code"
+  | "payment_methods"
 >;
 
 export type StageDef = { key: string; name: string; automations: string[] };
 
 const quoteAutomation = (b: Workflow) =>
   `${b.quote_requires_approval ? "Te pide OK y la manda" : "La manda"} con enlace de pago; si no responden en 2 días, da seguimiento`;
+
+// Además de la forma de cobro principal, las formas de pago dicen si hay fiado o apartado.
+const usesCredit = (b: Workflow) =>
+  b.payment_timing === "credit" || (b.payment_methods ?? []).some((m) => /fiado|cr[eé]dito/i.test(m));
+const usesDeposit = (b: Workflow) =>
+  b.payment_timing === "deposit" || (b.payment_methods ?? []).some((m) => /apartado|anticipo/i.test(m));
 
 // Tienda: el cliente pregunta, compra (al momento, con apartado o a crédito), se entrega y vuelve.
 function storeStages(b: Workflow): StageDef[] {
@@ -32,7 +39,7 @@ function storeStages(b: Workflow): StageDef[] {
     },
     { key: "quoted", name: "Cotizado", automations: [quoteAutomation(b)] },
   ];
-  if (b.payment_timing === "deposit")
+  if (usesDeposit(b))
     s.push({ key: "reserved", name: "Apartado", automations: ["Registra el anticipo y recuerda al cliente pasar por su pedido"] });
   s.push({
     key: "sold",
@@ -41,7 +48,7 @@ function storeStages(b: Workflow): StageDef[] {
   });
   if (b.offers_delivery)
     s.push({ key: "delivered", name: "Entregado", automations: ["Avisa al cliente cuándo llega su pedido y confirma la entrega"] });
-  if (b.payment_timing === "credit")
+  if (usesCredit(b))
     s.push(
       { key: "credit", name: "Por cobrar", automations: ["Recuerda al cliente su saldo antes de la fecha de pago"] },
       { key: "paid", name: "Pagado", automations: ["Registra el pago y manda el recibo"] },
@@ -107,7 +114,7 @@ export function fieldsFor(b: Workflow): string[] {
   if (b.business_type === "products") {
     f.push("Productos que le interesan");
     if (b.offers_delivery) f.push(`Dirección de entrega${references}`);
-    if (b.payment_timing === "credit") f.push("Saldo a crédito y fecha de pago");
+    if (usesCredit(b)) f.push("Saldo a crédito y fecha de pago");
   } else {
     f.push(
       `Dirección del trabajo${references}`,

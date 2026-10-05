@@ -121,7 +121,7 @@ export async function answerInterview(text: string) {
     const lead = fixing ? `${result.ack} Listo, corregido. Sigamos:` : result.ack;
     await nuna(supabase, business.id, next.key, `${lead} ${next.text(updated)}`);
   } else if (updated.onboarding_step === "interview") {
-    await nuna(supabase, business.id, "done", `${result.ack} ${CLOSING(updated.owner_name)}`);
+    await nuna(supabase, business.id, "done", `${result.ack} ${CLOSING(updated.owner_name, updated)}`);
     await supabase.from("businesses").update({ onboarding_step: "brand" }).eq("id", business.id);
   } else {
     await nuna(supabase, business.id, "done", `${result.ack} Listo, ya quedó todo actualizado.`);
