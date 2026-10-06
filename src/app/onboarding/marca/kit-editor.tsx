@@ -12,7 +12,9 @@ import {
   marksFor,
   PATTERNS,
   backdropCss,
+  dynamicVariants,
   fontsById,
+  logoType,
   kitPalette,
   type BrandKit,
   type Colors,
@@ -61,17 +63,17 @@ export function KitEditor({
   const rec = marks.map((m) => m.id);
   const ideas: { mark: MarkId; layout: Layout; nameStyle: NameStyle }[] = [
     { mark: rec[0], layout: "clasico", nameStyle: "dos-pesos" },
-    { mark: rec[0], layout: "centrado", nameStyle: "normal" },
+    { mark: rec[0], layout: "insignia", nameStyle: "normal" },
+    { mark: rec[0], layout: "palabra", nameStyle: "letra-simbolo" },
+    { mark: "monograma", layout: "siglas", nameStyle: "normal" },
     { mark: "calada-squircle", layout: "clasico", nameStyle: "dos-pesos" },
-    { mark: "monograma", layout: "centrado", nameStyle: "normal" },
-    { mark: rec[1], layout: "apilado", nameStyle: "dos-tonos" },
-    { mark: "letra-circulo", layout: "centrado", nameStyle: "mayusculas" },
+    { mark: rec[1], layout: "centrado", nameStyle: "normal" },
+    { mark: rec[1], layout: "insignia", nameStyle: "dos-pesos" },
     { mark: rec[0], layout: "firma", nameStyle: "letra-acento" },
-    { mark: rec[2], layout: "clasico", nameStyle: "minusculas" },
-    { mark: "calada-circulo", layout: "apilado", nameStyle: "dos-pesos" },
-    { mark: "letra-sola", layout: "palabra", nameStyle: "letra-acento" },
-    { mark: rec[1], layout: "clasico", nameStyle: "letra-acento" },
+    { mark: rec[2], layout: "apilado", nameStyle: "dos-tonos" },
+    { mark: "calada-circulo", layout: "siglas", nameStyle: "normal" },
     { mark: "monograma", layout: "clasico", nameStyle: "dos-pesos" },
+    { mark: rec[1], layout: "palabra", nameStyle: "letra-simbolo" },
   ];
   const set = (changes: Partial<BrandKit>) => {
     setSaved(false);
@@ -119,6 +121,21 @@ export function KitEditor({
           <span style={{ fontFamily: `"${f.heading.family}"`, fontWeight: f.heading.weight, letterSpacing: "-0.02em" }} className="text-3xl leading-none">
             {draft.slogan}
           </span>
+        </div>
+        <p className="rounded-2xl border border-line p-4 text-sm">
+          <strong className="text-lime">{logoType(draft).name}.</strong> <span className="text-muted">{logoType(draft).note}</span>
+        </p>
+        <div className="flex flex-col gap-2 rounded-2xl border border-line p-4" aria-label="Sistema dinámico">
+          <span className="text-xs text-muted">Sistema dinámico: tu logo en distintos colores para redes, temporadas y promociones.</span>
+          <div className="grid grid-cols-3 gap-2">
+            {dynamicVariants(draft).map((v) => (
+              <span key={v.label} title={v.label} className="flex h-16 items-center justify-center overflow-hidden rounded-xl border border-line px-2" style={{ background: v.bg }}>
+                <Fit>
+                  <BrandLogo kit={draft} name={name} size={20} theme={v.theme} />
+                </Fit>
+              </span>
+            ))}
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-line p-4" aria-label="Prueba en tamaño pequeño">
           <span className="text-xs text-muted">Prueba en chico:</span>

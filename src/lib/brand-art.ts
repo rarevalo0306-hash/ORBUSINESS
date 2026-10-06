@@ -1,5 +1,5 @@
 import "server-only";
-import { backdropSvg, fontsById, kitPalette, mixHex, onColor, type BrandKit } from "@/lib/brand";
+import { backdropSvg, dynamicVariants, fontsById, kitPalette, mixHex, onColor, type BrandKit } from "@/lib/brand";
 import { capRatio, logoArt, measure, paragraphSvg, place, textSvg, type Art, type KitFonts, type Layer } from "@/lib/brand-render";
 import { priceLabel } from "@/lib/interview";
 import { say, type AddressForm } from "@/lib/markets";
@@ -534,4 +534,28 @@ export async function tableroArt(c: BrandCtx): Promise<Art> {
       { name: "Publicación", svg: tile(1080, 630, 480, 530, rect(1080, 630, 480, 530, "#FFFFFF") + place(post, 1100, 665, 440, 440).svg) },
     ],
   };
+}
+
+// ---------- Sistema dinámico (el mismo logo en distintos fondos y colores) ----------
+
+export async function sistemaArt(c: BrandCtx): Promise<Art> {
+  const variants = dynamicVariants(c.kit);
+  const W = 1800;
+  const H = 1200;
+  const tw = (W - 80 - 2 * 20) / 3;
+  const th = (H - 80 - 20) / 2;
+  let tiles = "";
+  for (const [i, v] of variants.entries()) {
+    const x = 40 + (i % 3) * (tw + 20);
+    const y = 40 + Math.floor(i / 3) * (th + 20);
+    const id = nextId("dv");
+    const ink = v.theme === "blanco" ? "#FFFFFF" : kitPalette(c.kit).dark;
+    tiles +=
+      `<defs><clipPath id="${id}"><rect x="${x}" y="${y}" width="${tw}" height="${th}" rx="28"/></clipPath></defs>` +
+      `<g clip-path="url(#${id})"><rect x="${x}" y="${y}" width="${tw}" height="${th}" fill="${v.bg}"/></g>` +
+      (v.bg === "#FFFFFF" ? `<rect x="${x}" y="${y}" width="${tw}" height="${th}" rx="28" fill="none" stroke="#E5E7EB" stroke-width="2"/>` : "") +
+      place(await logo(c, "principal", v.theme), x + 60, y + 90, tw - 120, th - 200).svg +
+      textSvg(c.fonts.body, v.label.toLocaleUpperCase("es"), x + 40, y + th - 40, 18, ink, { tracking: 0.14, opacity: 0.75 });
+  }
+  return { width: W, height: H, layers: [{ name: "Fondo", svg: rect(0, 0, W, H, "#F3F2EF") }, { name: "Sistema", svg: tiles }] };
 }

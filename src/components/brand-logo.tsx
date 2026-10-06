@@ -12,6 +12,8 @@ import {
   markSvg,
   accentIndex,
   accentLetterColor,
+  acronym,
+  symbolIndex,
   mixHex,
   nameTracking,
   onColor,
@@ -128,7 +130,21 @@ export function BrandLogo({
     ) : null;
   const lightStyle: CSSProperties = { fontFamily: `"${f.body.family}", system-ui, sans-serif`, fontWeight: f.body.weight };
   const twoTone = (t: string) => {
-    if (kit.nameStyle === "letra-acento" && theme === "color") {
+    if (kit.nameStyle === "letra-simbolo" && symbolIndex(t) > 0) {
+      const chars = Array.from(t);
+      const i = symbolIndex(t);
+      const upper = chars[i] !== chars[i].toLocaleLowerCase("es");
+      const box = upper ? "0.78em" : "0.6em";
+      const svg = isotypeSvg(kit, { size: 100, mono: ink.mono, initials: name }).replace('width="100" height="100"', 'width="100%" height="100%"');
+      return (
+        <>
+          {chars.slice(0, i).join("")}
+          <span aria-hidden className="inline-block align-baseline" style={{ width: box, height: box, margin: "0 0.04em" }} dangerouslySetInnerHTML={{ __html: svg }} />
+          {chars.slice(i + 1).join("")}
+        </>
+      );
+    }
+    if ((kit.nameStyle === "letra-acento" || kit.nameStyle === "letra-simbolo") && theme === "color") {
       const chars = Array.from(t);
       const i = accentIndex(t);
       return (
@@ -172,6 +188,33 @@ export function BrandLogo({
     );
   }
 
+  if (kit.layout === "siglas" && !compact) {
+    return (
+      <span role="img" aria-label={label} className={`inline-flex flex-col ${className}`} style={{ gap: size * 0.1 }}>
+        <span style={{ ...nameStyle, letterSpacing: "-0.03em", fontSize: size * 1.3, lineHeight: 0.85, color: theme === "color" ? p.primary : ink.name }}>{acronym(name)}</span>
+        <span style={{ ...nameStyle, fontSize: size * 0.27 }}>{text}</span>
+        {captionEl(size * 0.14)}
+      </span>
+    );
+  }
+
+  if (kit.layout === "insignia") {
+    const fill = theme === "blanco" ? "#FFFFFF" : theme === "mono" ? p.dark : p.primary;
+    const innerWhite = theme !== "blanco";
+    const innerIso = isotypeSvg(kit, { size, mono: innerWhite ? "#FFFFFF" : undefined, initials: name });
+    return (
+      <span
+        role="img"
+        aria-label={label}
+        className={`inline-flex items-center ${className}`}
+        style={{ background: fill, borderRadius: 999, gap: size * 0.26, padding: `${size * 0.28}px ${size * 0.5}px ${size * 0.28}px ${size * 0.28}px` }}
+      >
+        <Svg html={innerIso} size={size} />
+        <span style={{ ...nameStyle, color: innerWhite ? "#FFFFFF" : p.dark, fontSize: size * 0.56 }}>{text}</span>
+      </span>
+    );
+  }
+
   if (kit.layout === "firma" && !compact) {
     const stroke = theme === "color" ? accentLetterColor(p) : ink.name;
     return (
@@ -190,7 +233,7 @@ export function BrandLogo({
       <span role="img" aria-label={label} className={`inline-flex flex-col ${className}`} style={{ gap: size * 0.1 }}>
         <span style={{ ...nameStyle, fontSize: size * 0.8 }}>
           {twoTone(text)}
-          <span style={{ color: theme === "color" ? p.accent : ink.name }}>.</span>
+          {!(kit.nameStyle === "letra-simbolo" && symbolIndex(text) > 0) && <span style={{ color: theme === "color" ? p.accent : ink.name }}>.</span>}
         </span>
         {captionEl(size * 0.17)}
       </span>

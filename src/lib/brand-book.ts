@@ -10,6 +10,7 @@ import {
   mixHex,
   onColor,
   rgbText,
+  logoType,
   rulesBase,
   type BrandBase,
 } from "@/lib/brand";
@@ -23,6 +24,7 @@ import {
   membreteArt,
   perfilArt,
   publicacionArt,
+  sistemaArt,
   tarjetaArts,
   vehiculoArt,
   volanteArt,
@@ -210,7 +212,11 @@ export async function bookPages(c: BrandCtx): Promise<Art[]> {
   add([
     ["Fondo", `<rect width="${W}" height="${H}" fill="#FFFFFF"/>`],
     ["Logo", place(await logo("principal", "color"), 300, 280, 1320, 440).svg],
-    ["Texto", t.body("Logo principal. Úsalo siempre que haya espacio: es la versión que mejor representa a la marca.", M, 900, 1100, 24, t.grey, 2).svg],
+    [
+      "Texto",
+      t.label(`Tipo de logo: ${logoType(c.kit).name}`, M, 870) +
+        t.body(`${logoType(c.kit).note} Úsalo siempre que haya espacio: es la versión que mejor representa a la marca.`, M, 900, 1300, 24, t.grey, 2).svg,
+    ],
     ["Encabezado", chrome(c, t, n(), "02 · Logotipo")],
   ]);
 
@@ -220,7 +226,7 @@ export async function bookPages(c: BrandCtx): Promise<Art[]> {
     ["vertical", "color", "Vertical", "light"],
     ["principal", "blanco", "En blanco, sobre fondos oscuros", "dark"],
     ["principal", "mono", "A un color", "white"],
-    ["isotipo", "color", "Símbolo", "light"],
+    ["isotipo", "color", "Isotipo (el símbolo solo)", "light"],
     ["sello", "color", "Sello", "white"],
   ];
   const tw = (W - 2 * M - 2 * 30) / 3;
@@ -237,6 +243,19 @@ export async function bookPages(c: BrandCtx): Promise<Art[]> {
     ["Fondo", `<rect width="${W}" height="${H}" fill="#FFFFFF"/>`],
     ["Versiones", versions],
     ["Encabezado", chrome(c, t, n(), "02 · Logotipo · Versiones")],
+  ]);
+
+  // 7b. Sistema dinámico
+  const sistema = await sistemaArt(c);
+  add([
+    ["Fondo", `<rect width="${W}" height="${H}" fill="#FFFFFF"/>`],
+    [
+      "Sistema dinámico",
+      t.title("Un logo, muchos colores", M, 150, 64, t.ink, 1100).svg +
+        t.body("Como las marcas dinámicas (MTV, Google), tu logo puede cambiar de fondo y color según el uso, sin perder su forma: redes, temporadas, promociones o productos.", M, 240, 1300, 24, t.grey, 2).svg +
+        place(sistema, M, 330, W - 2 * M, 640).svg,
+    ],
+    ["Encabezado", chrome(c, t, n(), "02 · Logotipo · Sistema dinámico")],
   ]);
 
   // 8. Espacio y tamaño mínimo

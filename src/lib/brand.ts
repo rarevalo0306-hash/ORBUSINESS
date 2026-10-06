@@ -32,8 +32,8 @@ export type FontPair = {
 };
 
 export type Shape = "circle" | "rounded" | "hexagon" | "shield" | "diamond" | "ring" | "none";
-export type Layout = "clasico" | "apilado" | "centrado" | "palabra" | "firma" | "emblema";
-export type NameStyle = "normal" | "minusculas" | "mayusculas" | "dos-tonos" | "dos-pesos" | "letra-acento";
+export type Layout = "clasico" | "apilado" | "centrado" | "palabra" | "firma" | "siglas" | "insignia" | "emblema";
+export type NameStyle = "normal" | "minusculas" | "mayusculas" | "dos-tonos" | "dos-pesos" | "letra-acento" | "letra-simbolo";
 // Fondo gráfico de la marca (redes, papelería, página): moderno y sin cosas repetidas.
 export type Pattern = "aurora" | "formas" | "lineas" | "puntos" | "limpio";
 export type { MarkId } from "@/lib/brand-marks";
@@ -137,7 +137,24 @@ export const LAYOUTS: { id: Layout; label: string; note: string }[] = [
   { id: "apilado", label: "Apilado", note: "El nombre en dos líneas junto al símbolo" },
   { id: "palabra", label: "Solo nombre", note: "El nombre es el logo, con un detalle de color" },
   { id: "firma", label: "Nombre con trazo", note: "El nombre con un trazo curvo debajo, como una firma" },
+  { id: "siglas", label: "Siglas", note: "Las iniciales en grande y el nombre completo debajo" },
+  { id: "insignia", label: "Insignia", note: "Nombre y símbolo juntos dentro de una forma" },
 ];
+
+// Tipo de logo (como lo clasifican los diseñadores), para explicarle al dueño qué está comprando.
+export const LOGO_TYPES = {
+  imagotipo: { name: "Imagotipo", note: "Símbolo y nombre juntos, pero cada uno funciona por separado (como Adidas o Spotify)." },
+  logotipo: { name: "Logotipo", note: "El nombre escrito con estilo es el logo (como Google o Coca-Cola)." },
+  monograma: { name: "Monograma", note: "Las iniciales son el logo, ideal para nombres largos (como IBM o CNN)." },
+  isologotipo: { name: "Isologotipo", note: "Nombre y símbolo integrados en una sola pieza (como Starbucks o Burger King)." },
+} as const;
+
+export function logoType(kit: Pick<BrandKit, "layout">): (typeof LOGO_TYPES)[keyof typeof LOGO_TYPES] {
+  if (kit.layout === "palabra" || kit.layout === "firma") return LOGO_TYPES.logotipo;
+  if (kit.layout === "siglas") return LOGO_TYPES.monograma;
+  if (kit.layout === "insignia" || kit.layout === "emblema") return LOGO_TYPES.isologotipo;
+  return LOGO_TYPES.imagotipo;
+}
 
 export const NAME_STYLES: { id: NameStyle; label: string }[] = [
   { id: "normal", label: "Normal" },
@@ -146,6 +163,7 @@ export const NAME_STYLES: { id: NameStyle; label: string }[] = [
   { id: "dos-tonos", label: "Dos colores" },
   { id: "dos-pesos", label: "Gruesa + delgada" },
   { id: "letra-acento", label: "Una letra de color" },
+  { id: "letra-simbolo", label: "Una letra es el símbolo" },
 ];
 
 export const PATTERNS: { id: Pattern; label: string }[] = [
@@ -341,6 +359,32 @@ export function accentIndex(text: string) {
   if (o > 0) return o;
   const v = chars.findIndex((c, i) => i > 0 && /[aeiouáéíóú]/i.test(c));
   return v > 0 ? v : 0;
+}
+
+// Letra que se cambia por el símbolo (solo letras redondas: la "o"), o -1 si no hay.
+export const symbolIndex = (text: string) => Array.from(text).findIndex((c, i) => i > 0 && /[oóOÓ]/.test(c));
+
+// Siglas para el estilo monograma (2 a 4 letras, sin "de", "la", "y"…).
+export function acronym(name: string) {
+  const stop = new Set(["de", "del", "la", "las", "el", "los", "y", "e", "en", "por", "para", "con", "a"]);
+  const words = name.replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter((w) => w && !stop.has(w.toLowerCase()));
+  const letters = words.slice(0, 4).map((w) => w[0].toLocaleUpperCase("es")).join("");
+  return letters.length >= 2 ? letters : name.replace(/[^\p{L}]/gu, "").slice(0, 2).toLocaleUpperCase("es");
+}
+
+// Sistema dinámico (como MTV o Google): el mismo logo en distintas combinaciones de fondo y color
+// para redes, temporadas, promociones o líneas de producto.
+export function dynamicVariants(kit: Pick<BrandKit, "palette" | "colors">) {
+  const p = kitPalette(kit);
+  const themeOn = (bg: string): "blanco" | "mono" => (onColor(bg, p.dark) === "#FFFFFF" ? "blanco" : "mono");
+  return [
+    { label: "Principal", bg: p.light, theme: "color" as const },
+    { label: "Sobre el color de marca", bg: p.primary, theme: themeOn(p.primary) },
+    { label: "Promociones", bg: p.accent, theme: themeOn(p.accent) },
+    { label: "Temporada suave", bg: p.secondary, theme: themeOn(p.secondary) },
+    { label: "Noche / premium", bg: p.dark, theme: "blanco" as const },
+    { label: "Blanco y negro", bg: "#FFFFFF", theme: "mono" as const },
+  ];
 }
 
 // Color de esa letra: el acento si se distingue sobre fondo claro; si no, el color principal.
@@ -616,8 +660,8 @@ export function rulesKits(b: BusinessForKit): BrandKit[] {
   const caption = captionFor(b);
   const designs: Omit<BrandKit, "proposition" | "slogan" | "caption" | "palette" | "icon">[] = [
     { name: "Inicial con presencia", concept: "La inicial del negocio dentro de un cuadro suave, con letra moderna y nombre en minúsculas: se reconoce de lejos y se ve actual en redes y en el local.", personality: ["Confiable", "Práctico", "Actual"], tone: "Claro y directo, con buen trato.", fonts: "jakarta", mark: hasConcept ? concept[0].id : "letra-squircle", shape: "rounded", monogram: false, layout: "clasico", nameStyle: "dos-pesos", pattern: "aurora" },
-    { name: "Formas que crecen", concept: "Un símbolo geométrico simple, como las marcas de diseño de hoy, y el nombre en dos líneas: ordenado, profesional y fácil de recordar.", personality: ["Profesional", "Moderno", "Atento"], tone: "Profesional pero cálido.", fonts: "grotesca", mark: hasConcept && concept[1] ? concept[1].id : "arco", shape: "rounded", monogram: false, layout: "apilado", nameStyle: "normal", pattern: "formas" },
-    { name: "El nombre manda", concept: "El nombre es el logo, con una letra de color y un trazo como firma: directo, seguro y fácil de reconocer hasta en un letrero lejano.", personality: ["Cercano", "Seguro", "Alegre"], tone: "Cercano, como un vecino de confianza.", fonts: "display", mark: "monograma", shape: "circle", monogram: false, layout: "firma", nameStyle: "letra-acento", pattern: "lineas" },
+    { name: "Sello de confianza", concept: "Un isologotipo: el símbolo del oficio y el nombre juntos dentro de una sola insignia, fácil de poner en el letrero, en las bolsas y en la camiseta del equipo.", personality: ["Profesional", "Moderno", "Atento"], tone: "Profesional pero cálido.", fonts: "grotesca", mark: hasConcept && concept[1] ? concept[1].id : "arco", shape: "rounded", monogram: false, layout: "insignia", nameStyle: "normal", pattern: "formas" },
+    { name: "El nombre manda", concept: "Un logotipo: el nombre es el logo y una de sus letras se convierte en el símbolo del oficio, como los grandes logos que esconden una idea en las letras.", personality: ["Cercano", "Seguro", "Alegre"], tone: "Cercano, como un vecino de confianza.", fonts: "display", mark: hasConcept ? concept[0].id : "monograma", shape: "circle", monogram: false, layout: "palabra", nameStyle: "letra-simbolo", pattern: "lineas" },
   ];
   return designs.map((d, i) => ({
     ...d,
@@ -718,7 +762,7 @@ function sanitizeBase(v: unknown, fallback: BrandBase | null): BrandBase | null 
 export function sanitizeKit(k: Partial<BrandKit>, fallback: BrandKit): BrandKit {
   const colors = k.colors === undefined ? (fallback.colors ?? null) : fixColors(k.colors);
   const fonts = FONT_PAIRS.some((f) => f.id === k.fonts) ? k.fonts! : fallback.fonts;
-  const nameStyle = oneOf(k.nameStyle, ["normal", "minusculas", "mayusculas", "dos-tonos", "dos-pesos", "letra-acento"] as const, fallback.nameStyle ?? "normal");
+  const nameStyle = oneOf(k.nameStyle, ["normal", "minusculas", "mayusculas", "dos-tonos", "dos-pesos", "letra-acento", "letra-simbolo"] as const, fallback.nameStyle ?? "normal");
   const marks = MARKS.map((m) => m.id);
   const curated = PALETTES.some((p) => p.id === k.palette) ? k.palette! : PALETTES.some((p) => p.id === fallback.palette) ? fallback.palette : PALETTES[0].id;
   return {
@@ -736,7 +780,7 @@ export function sanitizeKit(k: Partial<BrandKit>, fallback: BrandKit): BrandKit 
     icon: k.icon && BRAND_ICONS[k.icon] ? k.icon : fallback.icon,
     shape: oneOf(k.shape, ["circle", "rounded", "hexagon", "shield", "diamond", "ring", "none"] as const, fallback.shape),
     monogram: typeof k.monogram === "boolean" ? k.monogram : fallback.monogram,
-    layout: oneOf(k.layout, ["clasico", "apilado", "centrado", "palabra", "firma"] as const, fallback.layout === "emblema" ? "centrado" : (fallback.layout ?? "clasico")),
+    layout: oneOf(k.layout, ["clasico", "apilado", "centrado", "palabra", "firma", "siglas", "insignia"] as const, fallback.layout === "emblema" ? "centrado" : (fallback.layout ?? "clasico")),
     nameStyle: nameStyle === "mayusculas" && fontsById(fonts).script ? "normal" : nameStyle,
     pattern: oneOf(k.pattern, ["aurora", "formas", "lineas", "puntos", "limpio"] as const, oneOf(fallback.pattern, ["aurora", "formas", "lineas", "puntos", "limpio"] as const, "aurora")),
     base: sanitizeBase(k.base, k.base === null ? null : (fallback.base ?? null)),

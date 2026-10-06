@@ -18,6 +18,7 @@ import {
   perfilArt,
   portadaArt,
   publicacionArt,
+  sistemaArt,
   tableroArt,
   tarjetaArts,
   vehiculoArt,
@@ -64,6 +65,7 @@ const logoItem = (id: string, label: string, variant: LogoVariant, theme: LogoTh
 export const ITEMS: Item[] = [
   { id: "manual", label: "Manual de marca (libro completo)", group: "Presentación", formats: ["pdf"], px: 1920, art: bookPages },
   { id: "tablero", label: "Tablero de marca (presentación)", group: "Presentación", formats: ["png", "jpg", "pdf"], px: 2400, art: tableroArt },
+  { id: "sistema-dinamico", label: "Sistema dinámico (el logo en distintos colores)", group: "Presentación", formats: ["png", "pdf"], px: 2400, art: sistemaArt },
   logoItem("logo", "Logo principal", "principal", "color", ["svg", "png", "jpg", "pdf", "psd"], 2400),
   logoItem("logo-vertical", "Logo vertical", "vertical", "color", ["svg", "png", "pdf"], 1600),
   logoItem("logo-blanco", "Logo en blanco (fondos oscuros)", "principal", "blanco", ["svg", "png", "pdf"], 2400),

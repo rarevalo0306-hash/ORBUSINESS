@@ -7,6 +7,8 @@ import {
   markChar2,
   accentIndex,
   accentLetterColor,
+  acronym,
+  symbolIndex,
   mixHex,
   nameTracking,
   initials,
@@ -61,6 +63,9 @@ export async function kitFonts(kit: BrandKit): Promise<KitFonts> {
 }
 
 // ---------- Texto en trazos ----------
+
+export const xRatio = (font: Font) =>
+  ((font.tables.os2 as { sxHeight?: number } | undefined)?.sxHeight || font.unitsPerEm * 0.5) / font.unitsPerEm;
 
 export const capRatio = (font: Font) =>
   ((font.tables.os2 as { sCapHeight?: number } | undefined)?.sCapHeight || font.unitsPerEm * 0.7) / font.unitsPerEm;
@@ -270,11 +275,35 @@ function isoLayer(kit: BrandKit, name: string, fonts: KitFonts, size: number, th
 }
 
 // Nombre en una línea (a dos colores si el kit lo pide).
-function nameRun(kit: BrandKit, fonts: KitFonts, text: string, x: number, baseline: number, size: number, theme: LogoTheme, anchor: "start" | "middle" = "start") {
+function nameRun(kit: BrandKit, fonts: KitFonts, text: string, x: number, baseline: number, size: number, theme: LogoTheme, anchor: "start" | "middle" = "start", name = text) {
   const ink = inkFor(kit, theme);
   const tracking = nameTracking(kit);
   const width = measure(fonts.heading, text, size, tracking);
   const left = anchor === "middle" ? x - width / 2 : x;
+  if (kit.nameStyle === "letra-simbolo") {
+    // Una letra redonda (la "o") se cambia por el símbolo, como los logotipos que esconden una idea.
+    const chars = Array.from(text);
+    const i = symbolIndex(text);
+    if (i > 0) {
+      const upper = chars[i] !== chars[i].toLocaleLowerCase("es");
+      const ratio = upper ? capRatio(fonts.heading) : xRatio(fonts.heading);
+      const markH = size * ratio * 1.12;
+      const side = size * 0.04;
+      const before = chars.slice(0, i).join("");
+      const after = chars.slice(i + 1).join("");
+      const wb = measure(fonts.heading, before, size, tracking) + tracking * size;
+      const wm = markH + 2 * side;
+      const total = wb + wm + (after ? measure(fonts.heading, after, size, tracking) : 0);
+      const l = anchor === "middle" ? x - total / 2 : x;
+      return {
+        svg:
+          textSvg(fonts.heading, before, l, baseline, size, ink.name, { tracking }) +
+          `<g transform="translate(${(l + wb + side).toFixed(2)} ${(baseline - markH + size * 0.01).toFixed(2)})">${isoLayer(kit, name, fonts, markH, theme)}</g>` +
+          textSvg(fonts.heading, after, l + wb + wm, baseline, size, ink.name, { tracking }),
+        width: total,
+      };
+    }
+  }
   if (kit.nameStyle === "dos-tonos" && theme === "color") {
     const [a, b] = splitName(text);
     if (b) {
@@ -285,7 +314,7 @@ function nameRun(kit: BrandKit, fonts: KitFonts, text: string, x: number, baseli
       };
     }
   }
-  if (kit.nameStyle === "letra-acento" && theme === "color") {
+  if ((kit.nameStyle === "letra-acento" || kit.nameStyle === "letra-simbolo") && theme === "color") {
     // Una sola letra en color (como la "o" roja de Mobil).
     const chars = Array.from(text);
     const i = accentIndex(text);
@@ -374,7 +403,7 @@ export async function logoArt(kit: BrandKit, name: string, variant: LogoVariant 
   if (variant === "vertical" || kit.layout === "centrado") {
     const iso = 120;
     const size = 54;
-    const run = nameRun(kit, fonts, text, 0, 0, size, theme);
+    const run = nameRun(kit, fonts, text, 0, 0, size, theme, "start", name);
     const capW = caption ? measure(fonts.body, caption, 16, 0.16) : 0;
     const w = Math.ceil(Math.max(iso, run.width, capW) + 16);
     const nameBase = iso + 28 + cap * size;
@@ -384,8 +413,53 @@ export async function logoArt(kit: BrandKit, name: string, variant: LogoVariant 
       height: h,
       layers: [
         { name: "Símbolo", svg: `<g transform="translate(${(w - iso) / 2} 0)">${isoLayer(kit, name, fonts, iso, theme)}</g>` },
-        { name: "Nombre", svg: nameRun(kit, fonts, text, w / 2, nameBase, size, theme, "middle").svg },
+        { name: "Nombre", svg: nameRun(kit, fonts, text, w / 2, nameBase, size, theme, "middle", name).svg },
         ...(caption ? [{ name: "Texto pequeño", svg: captionSvg(w / 2, nameBase + 30, 16, "middle") }] : []),
+      ],
+    };
+  }
+
+  if (kit.layout === "siglas") {
+    // Monograma (como IBM o CNN): las siglas en grande y el nombre completo debajo.
+    const sig = acronym(name);
+    const p = kitPalette(kit);
+    const S = 150;
+    const sigW = measure(fonts.heading, sig, S, -0.03);
+    const nameSize = 30;
+    const nameW = measure(fonts.heading, text, nameSize, nameTracking(kit));
+    const capW = caption ? measure(fonts.body, caption, 16, 0.16) : 0;
+    const sigBase = cap * S;
+    const nameBase = sigBase + 30 + cap * nameSize;
+    const captionBase = nameBase + 22 + capB * 16;
+    return {
+      width: Math.ceil(Math.max(sigW, nameW, capW) + 8),
+      height: Math.ceil((caption ? captionBase : nameBase) + 8),
+      layers: [
+        { name: "Siglas", svg: textSvg(fonts.heading, sig, 0, sigBase, S, theme === "color" ? p.primary : ink.name, { tracking: -0.03 }) },
+        { name: "Nombre", svg: textSvg(fonts.heading, text, 2, nameBase, nameSize, ink.name, { tracking: nameTracking(kit) }) },
+        ...(caption ? [{ name: "Texto pequeño", svg: captionSvg(2, captionBase, 16, "start") }] : []),
+      ],
+    };
+  }
+
+  if (kit.layout === "insignia") {
+    // Isologotipo (como Starbucks o Burger King): símbolo y nombre dentro de una sola forma.
+    const p = kitPalette(kit);
+    const fill = theme === "blanco" ? "#FFFFFF" : theme === "mono" ? p.dark : p.primary;
+    const inner: LogoTheme = theme === "blanco" ? "color" : "blanco";
+    const iso = 92;
+    const padY = 26;
+    const size = 52;
+    const h = iso + padY * 2;
+    const run = nameRun(kit, fonts, text, padY + iso + 24, h / 2 + (cap * size) / 2, size, inner, "start", name);
+    const w = Math.ceil(padY + iso + 24 + run.width + h * 0.42);
+    return {
+      width: w,
+      height: h,
+      layers: [
+        { name: "Insignia", svg: `<rect width="${w}" height="${h}" rx="${h / 2}" fill="${fill}"/>` },
+        { name: "Símbolo", svg: `<g transform="translate(${padY} ${padY})">${isoLayer(kit, name, fonts, iso, inner)}</g>` },
+        { name: "Nombre", svg: run.svg },
       ],
     };
   }
@@ -393,7 +467,7 @@ export async function logoArt(kit: BrandKit, name: string, variant: LogoVariant 
   if (kit.layout === "firma") {
     // El nombre con un trazo curvo debajo, como una firma.
     const size = 96;
-    const run = nameRun(kit, fonts, text, 0, cap * size, size, theme);
+    const run = nameRun(kit, fonts, text, 0, cap * size, size, theme, "start", name);
     const w = Math.ceil(run.width + 8);
     const y = cap * size + size * 0.24;
     const stroke = theme === "color" ? accentLetterColor(kitPalette(kit)) : ink.name;
@@ -413,11 +487,13 @@ export async function logoArt(kit: BrandKit, name: string, variant: LogoVariant 
 
   if (kit.layout === "palabra") {
     const size = 96;
-    const run = nameRun(kit, fonts, text, 0, cap * size, size, theme);
+    const run = nameRun(kit, fonts, text, 0, cap * size, size, theme, "start", name);
     const p = kitPalette(kit);
     const r = size * 0.085;
-    const dot = `<circle cx="${run.width + r * 2.2}" cy="${cap * size - r}" r="${r}" fill="${theme === "color" ? p.accent : ink.name}"/>`;
-    const w = Math.ceil(run.width + r * 3.6);
+    // El punto de color sobra si una letra ya es el símbolo.
+    const noDot = kit.nameStyle === "letra-simbolo" && symbolIndex(text) > 0;
+    const dot = noDot ? "" : `<circle cx="${run.width + r * 2.2}" cy="${cap * size - r}" r="${r}" fill="${theme === "color" ? p.accent : ink.name}"/>`;
+    const w = Math.ceil(run.width + (dot ? r * 3.6 : 8));
     const captionBase = cap * size + 26 + capB * 26;
     const h = Math.ceil(caption ? captionBase + 6 : cap * size + 8);
     return {
@@ -425,7 +501,7 @@ export async function logoArt(kit: BrandKit, name: string, variant: LogoVariant 
       height: h,
       layers: [
         { name: "Nombre", svg: run.svg },
-        { name: "Detalle", svg: dot },
+        ...(dot ? [{ name: "Detalle", svg: dot }] : []),
         ...(caption ? [{ name: "Texto pequeño", svg: captionSvg(2, captionBase, 26, "start") }] : []),
       ],
     };
@@ -464,7 +540,7 @@ export async function logoArt(kit: BrandKit, name: string, variant: LogoVariant 
   // Clásico.
   const iso = 120;
   const size = kit.nameStyle === "mayusculas" ? 52 : 64;
-  const run = nameRun(kit, fonts, text, iso + 32, iso / 2 + (cap * size) / 2, size, theme);
+  const run = nameRun(kit, fonts, text, iso + 32, iso / 2 + (cap * size) / 2, size, theme, "start", name);
   return {
     width: Math.ceil(iso + 32 + run.width + 6),
     height: iso,

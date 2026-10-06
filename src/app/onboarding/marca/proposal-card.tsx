@@ -2,7 +2,7 @@ import { BrandLogo } from "@/components/brand-logo";
 import { Fit } from "@/components/fit";
 import { SubmitButton } from "@/components/submit-button";
 import { Button } from "@/components/ui";
-import { LAYOUTS, backdropCss, fontsById, kitPalette, type BrandKit } from "@/lib/brand";
+import { LAYOUTS, backdropCss, fontsById, kitPalette, logoType, type BrandKit } from "@/lib/brand";
 import { chooseKit } from "./actions";
 
 // Una propuesta de marca presentada como un tablero pequeño (logo, símbolo, eslogan y colores).
@@ -33,6 +33,9 @@ export function Proposal({ kit, name, index, selected }: { kit: BrandKit; name: 
         </div>
       </div>
       <div className="flex flex-col gap-1 px-2">
+        <span className="self-start rounded-full border border-line px-2.5 py-0.5 text-xs font-semibold text-lime" title={logoType(kit).note}>
+          {logoType(kit).name}
+        </span>
         <h3 className="font-display text-xl font-bold">{kit.name}</h3>
         <p className="text-sm text-muted">{kit.concept}</p>
         <p className="mt-1 text-xs text-muted">

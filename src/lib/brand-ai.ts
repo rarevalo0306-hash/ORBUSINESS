@@ -81,6 +81,9 @@ export async function proposeKits(b: Business, services: { name: string }[]): Pr
       "si el nombre es largo, más de 18 letras, usa estilo 'apilado' o 'centrado'); " +
       "y LA MARCA NACE DE CONOCER EL NEGOCIO (como Walter Landor). " +
       "En 'concept' explica la idea del logo y POR QUÉ representa a este negocio, usando lo que contó el dueño en la entrevista (giro, zona, lo que vende, cómo atiende, sus clientes). " +
+      "TIPOS DE LOGO: las 3 propuestas deben ser de tipos distintos: IMAGOTIPO (símbolo y nombre separables: layout clasico, centrado o apilado), " +
+      "LOGOTIPO (solo el nombre con estilo: layout palabra o firma; con nameStyle 'letra-simbolo' una 'o' del nombre se convierte en el símbolo, úsalo si el nombre tiene 'o'), " +
+      "MONOGRAMA (siglas en grande, ideal si el nombre es largo: layout siglas) e ISOLOGOTIPO (nombre y símbolo integrados en una insignia: layout insignia). " +
       "Símbolo: en al menos una propuesta usa un símbolo con concepto relacionado con el giro (los primeros de la lista); " +
       "en otra, uno con la inicial; y en la tercera, el estilo 'palabra' o una forma geométrica. No repitas el mismo símbolo. " +
       "Estilo del nombre: 'dos-pesos' (primera palabra gruesa y la segunda delgada) se ve muy actual. " +
