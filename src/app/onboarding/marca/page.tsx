@@ -21,7 +21,7 @@ import { Proposal } from "./proposal-card";
 import { Uploader } from "./uploader";
 
 // Elegir una propuesta hace que Nuna escriba la base de marca (puede tardar).
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 const OPTIONS = [
   { value: "new", label: "No tengo página / hazme una nueva", note: "Nuna diseña una página nueva para tu negocio." },

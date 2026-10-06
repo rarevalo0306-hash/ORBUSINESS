@@ -93,8 +93,12 @@ async function drawingsLeft(supabase: Supabase, businessId: string) {
   return DAILY_DRAWINGS - (count ?? 0);
 }
 
+// Si Nuna no escribió el encargo, se arma uno con el concepto de la propuesta.
 const ideaFor = (kit: BrandKit, industry: string | null) =>
-  kit.symbolIdea?.trim() || `a simple iconic symbol for a ${industry || "local business"}, inspired by a ${marksFor(industry)[0]?.label ?? "geometric shape"}`;
+  kit.symbolIdea?.trim() ||
+  `a clever, simple emblem for a ${industry || "local business"} (${marksFor(industry)[0]?.label ?? "geometric"} theme), ${
+    ["using negative space", "built from bold geometric shapes", "with a hidden double meaning"][Math.abs(kit.name.length) % 3]
+  }`;
 
 async function draw(supabase: Supabase, userId: string, b: { id: string; industry: string | null }, kit: BrandKit, n: number) {
   if (!recraftEnabled() || (await drawingsLeft(supabase, b.id)) <= 0) return [];
@@ -115,12 +119,12 @@ async function draw(supabase: Supabase, userId: string, b: { id: string; industr
 export async function generateKits() {
   const { supabase, user, business } = await requireBusiness();
   const { data: services } = await supabase.from("services").select("name").eq("business_id", business.id).order("sort");
-  const kits = await Promise.all(
-    (await proposeKits(business, services ?? [])).map(async (kit) => {
-      const [symbol] = await draw(supabase, user.id, business, kit, 1);
-      return symbol ? { ...kit, mark: "ia" as const, aiMark: symbol, aiChoices: [symbol] } : kit;
-    }),
-  );
+  // Los símbolos se piden uno tras otro (Recraft limita los pedidos simultáneos).
+  const kits: BrandKit[] = [];
+  for (const kit of await proposeKits(business, services ?? [])) {
+    const [symbol] = await draw(supabase, user.id, business, kit, 1);
+    kits.push(symbol ? { ...kit, mark: "ia" as const, aiMark: symbol, aiChoices: [symbol] } : kit);
+  }
   const { error } = await supabase
     .from("businesses")
     .update({ brand_options: kits as unknown as Json })

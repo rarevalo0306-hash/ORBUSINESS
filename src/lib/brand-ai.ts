@@ -112,8 +112,8 @@ export async function proposeKits(b: Business, services: { name: string }[]): Pr
       '"proposition": "propuesta de valor (1 oración)", "personality": ["3 adjetivos"], "tone": "tono de voz (1 oración)", "slogan": "eslogan", ' +
       '"caption": "Giro · Zona", "colors": {"primary": "#1F3A5F", "secondary": "#F2A900", "accent": "#E4572E", "dark": "#14202E", "light": "#F5F3EE"}, ' +
       '"fonts": "id", "mark": "id", "symbolIdea": "idea del símbolo en inglés", "icon": "id", "layout": "id", "nameStyle": "id", "pattern": "id"}, ...]} con exactamente 3 kits.',
-    maxTokens: 3000,
-    temperature: 1.1,
+    maxTokens: 6000,
+    temperature: 0.95,
   });
 
   // Los valores se aceptan como texto y sanitizeKit deja solo los válidos.

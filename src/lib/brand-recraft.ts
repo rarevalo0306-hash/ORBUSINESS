@@ -11,8 +11,6 @@ const API = `${process.env.RECRAFT_BASE_URL?.trim() || "https://external.api.rec
 export const recraftEnabled = () => Boolean(process.env.RECRAFT_API_KEY?.trim());
 const model = () => process.env.RECRAFT_MODEL?.trim() || "recraftv4_1_vector";
 
-const NEGATIVE =
-  "text, letters, words, numbers, typography, watermark, signature, 3d, bevel, emboss, drop shadow, photo, realistic, mockup, frame, border, badge outline, multiple logos, clutter, hairline strokes, tiny details";
 
 // Encargo de diseño para la IA (en inglés: así entiende mejor el estilo).
 export function symbolPrompt(idea: string, industry: string | null) {
@@ -20,7 +18,7 @@ export function symbolPrompt(idea: string, industry: string | null) {
     `Professional minimalist logomark, symbol only, for a ${industry || "small local business"} brand. Concept: ${idea}. ` +
     "Flat vector logo, bold simple geometric shapes, clever negative space, 2 or 3 solid flat colors, perfectly centered on a plain white background, " +
     "balanced, memorable and iconic, readable at very small sizes, world-class brand identity design in the spirit of Pentagram and Chermayeff & Geismar. " +
-    "No text, no letters, no words."
+    "Absolutely no text, letters, words or numbers; no 3d, no shadows, no gradients, no mockup, no frame, no tiny details."
   );
 }
 
@@ -95,27 +93,32 @@ export async function normalizeSymbol(svgText: string): Promise<string | null> {
 export async function drawSymbols(opts: { idea: string; industry: string | null; colors: string[]; n: number }): Promise<string[]> {
   const key = process.env.RECRAFT_API_KEY?.trim();
   if (!key) return [];
-  const full = {
+  const body = {
     prompt: symbolPrompt(opts.idea, opts.industry),
     model: model(),
     size: "1:1",
     n: Math.max(1, Math.min(6, opts.n)),
-    negative_prompt: NEGATIVE,
     controls: { colors: opts.colors.slice(0, 4).map((c) => ({ rgb: rgb(c) })), background_color: { rgb: [255, 255, 255] } },
   };
-  const call = (body: object) =>
+  const call = (b: object) =>
     fetch(API, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(b),
       signal: AbortSignal.timeout(100_000),
     });
   try {
-    let res = await call(full);
+    // Si Recraft pide esperar (demasiados pedidos seguidos), se reintenta con pausas.
+    let res = await call(body);
+    for (const wait of [3000, 7000, 12000]) {
+      if (res.status !== 429) break;
+      await new Promise((r) => setTimeout(r, wait));
+      res = await call(body);
+    }
     if (res.status === 400 || res.status === 422) {
-      // Si el modelo no acepta algún campo opcional, se pide sin ellos.
-      console.error("Recraft rechazó el pedido completo:", (await res.text()).slice(0, 300));
-      res = await call({ prompt: full.prompt, model: full.model, size: full.size, n: full.n });
+      // Si el modelo no acepta los colores, se pide sin ellos (los colores se ajustan después).
+      console.error("Recraft rechazó el pedido:", (await res.text()).slice(0, 300));
+      res = await call({ prompt: body.prompt, model: body.model, size: body.size, n: body.n });
     }
     if (!res.ok) {
       console.error("Recraft respondió", res.status, (await res.text()).slice(0, 300));

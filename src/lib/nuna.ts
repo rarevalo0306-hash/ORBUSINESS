@@ -294,7 +294,16 @@ export async function aiJson<T>(opts: {
       const data = (await response.json()) as { choices?: { message?: { content?: string | null } }[] };
       const content = data.choices?.[0]?.message?.content;
       if (!content) continue;
-      const parsed = opts.schema.safeParse(JSON.parse(content));
+      // A veces la respuesta llega cortada o con texto alrededor: se intenta rescatar el JSON y,
+      // si no se puede, se pide de nuevo.
+      let raw: unknown;
+      try {
+        raw = JSON.parse(content.trim().replace(/^```(?:json)?\s*|\s*```$/g, ""));
+      } catch {
+        console.error("Nuna (deepseek): respuesta JSON incompleta, se pide de nuevo.");
+        continue;
+      }
+      const parsed = opts.schema.safeParse(raw);
       if (parsed.success) return parsed.data;
       console.error("Nuna (deepseek): la respuesta no tiene el formato esperado:", parsed.error.issues.slice(0, 3));
     }
