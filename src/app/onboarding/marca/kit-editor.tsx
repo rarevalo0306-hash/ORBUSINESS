@@ -9,12 +9,16 @@ import {
   LAYOUTS,
   MARKS,
   NAME_STYLES,
+  marksFor,
   PATTERNS,
   backdropCss,
   fontsById,
   kitPalette,
   type BrandKit,
   type Colors,
+  type Layout,
+  type MarkId,
+  type NameStyle,
   type Palette,
 } from "@/lib/brand";
 import { customizeKit } from "./actions";
@@ -35,13 +39,16 @@ export function KitEditor({
   palettes,
   customColors,
   icons,
+  industry,
 }: {
   kit: BrandKit;
   name: string;
+  industry: string | null;
   palettes: Palette[];
   customColors: { label: string; colors: Colors }[]; // paletas que Nuna inventó en las propuestas
   icons: string[];
 }) {
+  const marks = marksFor(industry);
   const [draft, setDraft] = useState(kit);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +57,22 @@ export function KitEditor({
   const p = kitPalette(draft);
   const f = fontsById(draft.fonts);
   const iconMark = MARKS.find((m) => m.id === draft.mark)?.kind === "icono";
+  // Ideas de logo: combinaciones listas de símbolo, estilo y forma de escribir el nombre.
+  const rec = marks.map((m) => m.id);
+  const ideas: { mark: MarkId; layout: Layout; nameStyle: NameStyle }[] = [
+    { mark: rec[0], layout: "clasico", nameStyle: "dos-pesos" },
+    { mark: rec[0], layout: "centrado", nameStyle: "normal" },
+    { mark: rec[1], layout: "clasico", nameStyle: "minusculas" },
+    { mark: rec[1], layout: "apilado", nameStyle: "dos-tonos" },
+    { mark: "letra-squircle", layout: "clasico", nameStyle: "dos-pesos" },
+    { mark: "letra-circulo", layout: "centrado", nameStyle: "mayusculas" },
+    { mark: rec[2], layout: "apilado", nameStyle: "dos-pesos" },
+    { mark: "letra-sola", layout: "palabra", nameStyle: "dos-tonos" },
+    { mark: rec[3], layout: "clasico", nameStyle: "normal" },
+    { mark: "letra-arco", layout: "centrado", nameStyle: "dos-pesos" },
+    { mark: rec[4], layout: "centrado", nameStyle: "minusculas" },
+    { mark: draft.mark, layout: "palabra", nameStyle: "dos-pesos" },
+  ];
   const set = (changes: Partial<BrandKit>) => {
     setSaved(false);
     setDraft((d) => ({ ...d, ...changes }));
@@ -106,6 +129,28 @@ export function KitEditor({
 
       {/* Ajustes */}
       <div className="flex flex-col gap-6">
+        <Group title="Ideas de logo (toca una para usarla)">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {ideas.map((idea, i) => {
+              const active = draft.mark === idea.mark && draft.layout === idea.layout && draft.nameStyle === idea.nameStyle;
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  aria-pressed={active}
+                  aria-label={`Idea de logo ${i + 1}`}
+                  onClick={() => set(idea)}
+                  className={`flex h-24 items-center justify-center overflow-hidden rounded-xl border bg-white p-3 transition ${active ? "border-lime ring-2 ring-lime" : "border-line hover:border-muted"}`}
+                >
+                  <Fit>
+                    <BrandLogo kit={{ ...draft, ...idea }} name={name} size={30} />
+                  </Fit>
+                </button>
+              );
+            })}
+          </div>
+        </Group>
+
         <Group title="Estilo de logo">
           <div className="grid grid-cols-2 gap-2">
             {LAYOUTS.map((l) => (
@@ -121,7 +166,7 @@ export function KitEditor({
 
         <Group title="Símbolo">
           <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-            {MARKS.map((m) => (
+            {marks.map((m) => (
               <button key={m.id} type="button" aria-pressed={draft.mark === m.id} aria-label={m.label} title={m.label} onClick={() => set({ mark: m.id })} className={`${tileBtn(draft.mark === m.id)} bg-white`}>
                 <BrandLogo kit={{ ...draft, mark: m.id }} name={name} variant="isotipo" size={44} />
               </button>

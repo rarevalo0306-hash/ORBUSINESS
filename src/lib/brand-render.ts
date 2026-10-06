@@ -281,6 +281,19 @@ function nameRun(kit: BrandKit, fonts: KitFonts, text: string, x: number, baseli
       };
     }
   }
+  if (kit.nameStyle === "dos-pesos") {
+    // Primera parte en la letra gruesa de títulos; la segunda, en la delgada de textos.
+    const [a, b] = splitName(text);
+    if (b) {
+      const wa = measure(fonts.heading, `${a} `, size, tracking);
+      const w2 = wa + measure(fonts.body, b, size, tracking);
+      const l2 = anchor === "middle" ? x - w2 / 2 : x;
+      return {
+        svg: textSvg(fonts.heading, a, l2, baseline, size, ink.name, { tracking }) + textSvg(fonts.body, b, l2 + wa, baseline, size, ink.name, { tracking }),
+        width: w2,
+      };
+    }
+  }
   return { svg: textSvg(fonts.heading, text, left, baseline, size, ink.name, { tracking }), width };
 }
 
@@ -390,10 +403,11 @@ export async function logoArt(kit: BrandKit, name: string, variant: LogoVariant 
     const two = kit.nameStyle === "dos-tonos" && theme === "color";
     const tracking = nameTracking(kit);
     const x = iso + 28;
+    const light = (i: number) => kit.nameStyle === "dos-pesos" && i === 1;
     const nameSvg = lines
-      .map((l, i) => textSvg(fonts.heading, l, x, top + cap * size + i * lh, size, two && i === 1 ? p.primary : ink.name, { tracking }))
+      .map((l, i) => textSvg(light(i) ? fonts.body : fonts.heading, l, x, top + cap * size + i * lh, size, two && i === 1 ? p.primary : ink.name, { tracking }))
       .join("");
-    const widths = lines.map((l) => measure(fonts.heading, l, size, tracking));
+    const widths = lines.map((l, i) => measure(light(i) ? fonts.body : fonts.heading, l, size, tracking));
     const capW = caption ? measure(fonts.body, caption, 15, 0.16) : 0;
     return {
       width: Math.ceil(x + Math.max(...widths, capW) + 6),

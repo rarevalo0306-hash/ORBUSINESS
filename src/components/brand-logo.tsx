@@ -123,15 +123,22 @@ export function BrandLogo({
         {kit.caption}
       </span>
     ) : null;
+  const lightStyle: CSSProperties = { fontFamily: `"${f.body.family}", system-ui, sans-serif`, fontWeight: f.body.weight };
   const twoTone = (t: string) => {
-    if (kit.nameStyle !== "dos-tonos" || theme !== "color") return t;
     const [a, b] = splitName(t);
-    return b ? (
+    if (!b) return t;
+    if (kit.nameStyle === "dos-pesos") {
+      return (
+        <>
+          {a} <span style={lightStyle}>{b}</span>
+        </>
+      );
+    }
+    if (kit.nameStyle !== "dos-tonos" || theme !== "color") return t;
+    return (
       <>
         {a} <span style={{ color: ink.accent }}>{b}</span>
       </>
-    ) : (
-      t
     );
   };
   const label = `Logo de ${name}`;
@@ -171,7 +178,7 @@ export function BrandLogo({
         <Svg html={iso} size={size} />
         <span className="flex flex-col" style={{ gap: size * 0.04 }}>
           <span style={{ ...nameStyle, fontSize: size * 0.42 }}>{l1}</span>
-          {l2 && <span style={{ ...nameStyle, fontSize: size * 0.42, color: two ? p.primary : ink.name }}>{l2}</span>}
+          {l2 && <span style={{ ...nameStyle, ...(kit.nameStyle === "dos-pesos" ? lightStyle : {}), fontSize: size * 0.42, color: two ? p.primary : ink.name }}>{l2}</span>}
           {captionEl(size * 0.12)}
         </span>
       </span>

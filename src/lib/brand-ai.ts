@@ -3,8 +3,8 @@ import { z } from "zod";
 import {
   FONT_PAIRS,
   LAYOUTS,
-  MARKS,
   NAME_STYLES,
+  marksFor,
   PATTERNS,
   captionFor,
   iconsFor,
@@ -72,13 +72,18 @@ export async function proposeKits(b: Business, services: { name: string }[]): Pr
       "Inventa una paleta moderna para cada propuesta (5 colores HEX): primary (color de marca profundo, el texto blanco debe leerse encima), " +
       "secondary (tono suave que combine), accent (un acento vivo y actual), dark (casi negro con un toque del color) y light (fondo cálido casi blanco). " +
       "Las 3 paletas deben ser claramente distintas. " +
+      "Símbolo: en al menos una propuesta usa un símbolo con concepto relacionado con el giro (los primeros de la lista); " +
+      "en otra, uno con la inicial; y en la tercera, el estilo 'palabra' o una forma geométrica. No repitas el mismo símbolo. " +
+      "Estilo del nombre: 'dos-pesos' (primera palabra gruesa y la segunda delgada) se ve muy actual. " +
       "Usa SOLO los id de las listas para letra, símbolo, ícono, estilo de logo, estilo del nombre y fondo. " +
       "caption es el texto pequeño del logo (por ejemplo 'Ferretería · Managua'), máximo 30 letras; no inventes años ni datos.",
     user: [
       businessBrief(b, services),
       "",
       `Letras (id: estilo): ${FONT_PAIRS.map((f) => `${f.id}: ${f.mood}`).join("; ")}.`,
-      `Símbolos (id: descripción): ${MARKS.map((m) => `${m.id}: ${m.label}`).join("; ")}.`,
+      `Símbolos, ordenados de más a menos relacionados con este negocio (id: descripción): ${marksFor(b.industry)
+        .map((m) => `${m.id}: ${m.label}${m.kind === "concepto" ? " (símbolo con concepto)" : m.kind === "letra" ? " (con la inicial)" : ""}`)
+        .join("; ")}.`,
       `Íconos (solo para los símbolos icono-*): ${icons.join(", ")}.`,
       `Estilos de logo: ${LAYOUTS.map((l) => `${l.id} (${l.note})`).join(", ")}.`,
       `Estilos del nombre: ${NAME_STYLES.map((n) => n.id).join(", ")} (dos-tonos = la segunda parte del nombre en el color de la marca).`,

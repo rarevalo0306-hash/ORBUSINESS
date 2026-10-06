@@ -4,7 +4,7 @@
 // problemas de derechos. La IA elige y combina las piezas e inventa colores y textos a la medida.
 
 import { BRAND_ICONS } from "@/lib/brand-icons";
-import { MARKS, modernMark, type MarkColors, type MarkId } from "@/lib/brand-marks";
+import { MARKS, marksFor, modernMark, type MarkColors, type MarkId } from "@/lib/brand-marks";
 import { norm } from "@/lib/interview";
 import { say, type AddressForm } from "@/lib/markets";
 
@@ -33,7 +33,7 @@ export type FontPair = {
 
 export type Shape = "circle" | "rounded" | "hexagon" | "shield" | "diamond" | "ring" | "none";
 export type Layout = "clasico" | "apilado" | "centrado" | "palabra" | "emblema";
-export type NameStyle = "normal" | "minusculas" | "mayusculas" | "dos-tonos";
+export type NameStyle = "normal" | "minusculas" | "mayusculas" | "dos-tonos" | "dos-pesos";
 // Fondo gráfico de la marca (redes, papelería, página): moderno y sin cosas repetidas.
 export type Pattern = "aurora" | "formas" | "lineas" | "puntos" | "limpio";
 export type { MarkId } from "@/lib/brand-marks";
@@ -143,6 +143,7 @@ export const NAME_STYLES: { id: NameStyle; label: string }[] = [
   { id: "minusculas", label: "minúsculas" },
   { id: "mayusculas", label: "MAYÚSCULAS" },
   { id: "dos-tonos", label: "Dos colores" },
+  { id: "dos-pesos", label: "Gruesa + delgada" },
 ];
 
 export const PATTERNS: { id: Pattern; label: string }[] = [
@@ -153,7 +154,7 @@ export const PATTERNS: { id: Pattern; label: string }[] = [
   { id: "limpio", label: "Limpio" },
 ];
 
-export { MARKS };
+export { MARKS, marksFor };
 
 // ---------- Íconos por giro ----------
 
@@ -585,6 +586,8 @@ export const captionFor = (b: Pick<BusinessForKit, "industry" | "zone">) =>
 
 export function rulesKits(b: BusinessForKit): BrandKit[] {
   const palettes = palettesFor(b.industry);
+  const concept = marksFor(b.industry).filter((m) => m.kind === "concepto");
+  const hasConcept = concept[0]?.tags?.some((t) => norm(b.industry ?? "").includes(t)) ?? false;
   const icons = iconsFor(b.industry);
   const extras = [
     b.offers_delivery ? "con entrega a domicilio" : null,
@@ -594,8 +597,8 @@ export function rulesKits(b: BusinessForKit): BrandKit[] {
   const slogans = slogansFor(b);
   const caption = captionFor(b);
   const designs: Omit<BrandKit, "proposition" | "slogan" | "caption" | "palette" | "icon">[] = [
-    { name: "Inicial con presencia", concept: "La inicial del negocio dentro de un cuadro suave, con letra moderna y nombre en minúsculas: se reconoce de lejos y se ve actual en redes y en el local.", personality: ["Confiable", "Práctico", "Actual"], tone: "Claro y directo, con buen trato.", fonts: "jakarta", mark: "letra-squircle", shape: "rounded", monogram: false, layout: "clasico", nameStyle: "minusculas", pattern: "aurora" },
-    { name: "Formas que crecen", concept: "Un símbolo geométrico simple, como las marcas de diseño de hoy, y el nombre en dos líneas: ordenado, profesional y fácil de recordar.", personality: ["Profesional", "Moderno", "Atento"], tone: "Profesional pero cálido.", fonts: "grotesca", mark: "arco", shape: "rounded", monogram: false, layout: "apilado", nameStyle: "normal", pattern: "formas" },
+    { name: "Inicial con presencia", concept: "La inicial del negocio dentro de un cuadro suave, con letra moderna y nombre en minúsculas: se reconoce de lejos y se ve actual en redes y en el local.", personality: ["Confiable", "Práctico", "Actual"], tone: "Claro y directo, con buen trato.", fonts: "jakarta", mark: hasConcept ? concept[0].id : "letra-squircle", shape: "rounded", monogram: false, layout: "clasico", nameStyle: "dos-pesos", pattern: "aurora" },
+    { name: "Formas que crecen", concept: "Un símbolo geométrico simple, como las marcas de diseño de hoy, y el nombre en dos líneas: ordenado, profesional y fácil de recordar.", personality: ["Profesional", "Moderno", "Atento"], tone: "Profesional pero cálido.", fonts: "grotesca", mark: hasConcept && concept[1] ? concept[1].id : "arco", shape: "rounded", monogram: false, layout: "apilado", nameStyle: "normal", pattern: "formas" },
     { name: "El nombre manda", concept: "El nombre es el logo, con letra con carácter y un punto de color: directo, seguro y muy fácil de usar en todo.", personality: ["Cercano", "Seguro", "Alegre"], tone: "Cercano, como un vecino de confianza.", fonts: "display", mark: "letra-circulo", shape: "circle", monogram: false, layout: "palabra", nameStyle: "dos-tonos", pattern: "lineas" },
   ];
   return designs.map((d, i) => ({
@@ -697,7 +700,7 @@ function sanitizeBase(v: unknown, fallback: BrandBase | null): BrandBase | null 
 export function sanitizeKit(k: Partial<BrandKit>, fallback: BrandKit): BrandKit {
   const colors = k.colors === undefined ? (fallback.colors ?? null) : fixColors(k.colors);
   const fonts = FONT_PAIRS.some((f) => f.id === k.fonts) ? k.fonts! : fallback.fonts;
-  const nameStyle = oneOf(k.nameStyle, ["normal", "minusculas", "mayusculas", "dos-tonos"] as const, fallback.nameStyle ?? "normal");
+  const nameStyle = oneOf(k.nameStyle, ["normal", "minusculas", "mayusculas", "dos-tonos", "dos-pesos"] as const, fallback.nameStyle ?? "normal");
   const marks = MARKS.map((m) => m.id);
   const curated = PALETTES.some((p) => p.id === k.palette) ? k.palette! : PALETTES.some((p) => p.id === fallback.palette) ? fallback.palette : PALETTES[0].id;
   return {

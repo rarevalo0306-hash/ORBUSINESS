@@ -157,6 +157,7 @@ export default async function BrandPage(props: PageProps<"/onboarding/marca">) {
               palettes={palettesFor(business.industry)}
               customColors={customColors}
               icons={iconsFor(business.industry)}
+              industry={business.industry}
             />
           </div>
         )}
