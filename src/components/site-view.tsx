@@ -75,7 +75,11 @@ function siteTheme(p: Palette, heading: string, body: string, tpl: SiteTemplate,
   const brandLike = { pattern: kit?.pattern ?? "aurora", palette: p.id, colors: kit?.colors ?? (p.id === "custom" ? p : null) } as Pick<BrandKit, "pattern" | "palette" | "colors">;
   return {
     ...t,
-    "--hero": backdropCss(brandLike, "oscuro"),
+    // En modo contraste la página ya es del color de la marca: la portada va en el tono oscuro para que se distinga.
+    "--hero":
+      tpl.mode === "contraste"
+        ? `radial-gradient(120% 90% at 85% 15%, ${mixHex(p.dark, p.primary, 0.55)} 0%, ${p.dark} 65%)`
+        : backdropCss(brandLike, "oscuro"),
     "--hero-soft": backdropCss(brandLike, "claro"),
     "--on-hero": onColor(p.primary, p.dark),
     "--r": corners[0],
@@ -158,7 +162,7 @@ function Ctas({ c, center = false, light = false }: { c: Ctx; center?: boolean; 
   return (
     <div className={`flex flex-wrap gap-3 ${center ? "justify-center" : ""}`}>
       {c.waFirst && c.wa && (
-        <a href={c.wa} target="_blank" rel="noopener" className={btnWa}>
+        <a href={c.wa} target="_blank" rel="noopener" className={light ? `${btnWa} ring-1 ring-white/50` : btnWa}>
           <WaIcon /> {c.waLabel}
         </a>
       )}
@@ -199,9 +203,9 @@ function Visual({ c, className = "" }: { c: Ctx; className?: string }) {
 function HeroBackdrop({ c }: { c: Ctx }) {
   return (
     <div className="absolute inset-0 overflow-hidden" style={{ background: "var(--hero)" }} aria-hidden>
-      <div className="absolute -right-24 -top-10 opacity-20 md:right-12 md:top-1/2 md:-translate-y-1/2 md:opacity-100 lg:right-16">
+      <div className="absolute -bottom-20 -right-24 opacity-15 md:bottom-auto md:right-10 md:top-1/2 md:-translate-y-1/2 md:opacity-100 lg:right-14">
         {c.kit ? (
-          <BrandLogo kit={c.kit} name={c.site.name} variant="isotipo" theme="oscuro" size={360} />
+          <BrandLogo kit={c.kit} name={c.site.name} variant="isotipo" theme="oscuro" size={300} />
         ) : (
           <span className="block text-[18rem] font-bold leading-none tracking-tighter text-white/15 [font-family:var(--heading)]">{c.initials}</span>
         )}
@@ -284,8 +288,8 @@ function Hero({ c }: { c: Ctx }) {
             )}
             <div className="relative flex min-h-[560px] sm:min-h-[640px] flex-col justify-end gap-5 p-6 text-white sm:p-12">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/80">{label}</p>
-              <h1 className={`${c.h1} max-w-3xl`}>{c.headline}</h1>
-              <p className="max-w-xl text-lg text-white/85">{c.intro}</p>
+              <h1 className={`${c.h1} ${c.photo ? "max-w-3xl" : "max-w-3xl md:max-w-[58%]"}`}>{c.headline}</h1>
+              <p className={`max-w-xl text-lg text-white/85 ${c.photo ? "" : "md:max-w-[52%]"}`}>{c.intro}</p>
               <Ctas c={c} light />
             </div>
           </div>
