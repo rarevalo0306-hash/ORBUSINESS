@@ -4,6 +4,9 @@ import {
   fontsById,
   isModernMark,
   markChar,
+  markChar2,
+  accentIndex,
+  accentLetterColor,
   mixHex,
   nameTracking,
   initials,
@@ -16,7 +19,7 @@ import {
   splitName,
   type BrandKit,
 } from "@/lib/brand";
-import { letterCenter, letterSize, modernMark } from "@/lib/brand-marks";
+import { MONO_X, letterCenter, letterSize, modernMark } from "@/lib/brand-marks";
 
 // Motor de dibujo del kit de marca: todo se arma como SVG con el texto convertido a trazos,
 // para que los archivos no dependan de tener la tipografía instalada (imprenta, Illustrator, etc.).
@@ -245,16 +248,17 @@ function inkFor(kit: BrandKit, theme: LogoTheme) {
 }
 
 // Inicial del símbolo moderno, en trazos, centrada en el cuadro de 100.
-function markLetterPath(kit: BrandKit, name: string, fonts: KitFonts) {
+function markLetterPath(kit: BrandKit, name: string, fonts: KitFonts, which: 0 | 1 = 0) {
   const size = letterSize(kit.mark);
-  const char = markChar(name);
+  const char = which === 0 ? markChar(name) : markChar2(name);
   const w = measure(fonts.heading, char, size);
-  return textPath(fonts.heading, char, 50 - w / 2, letterCenter(kit.mark) + (capRatio(fonts.heading) * size) / 2, size);
+  const cx = kit.mark === "monograma" ? MONO_X[which] : 50;
+  return textPath(fonts.heading, char, cx - w / 2, letterCenter(kit.mark) + (capRatio(fonts.heading) * size) / 2, size);
 }
 
 function isoLayer(kit: BrandKit, name: string, fonts: KitFonts, size: number, theme: LogoTheme) {
   if (isModernMark(kit.mark)) {
-    const inner = isotypeSvg(kit, { size: 100, theme, initials: name, letterPath: markLetterPath(kit, name, fonts) })
+    const inner = isotypeSvg(kit, { size: 100, theme, initials: name, letterPath: markLetterPath(kit, name, fonts), letterPath2: kit.mark === "monograma" ? markLetterPath(kit, name, fonts, 1) : undefined })
       .replace(/^<svg[^>]*>/, "")
       .replace(/<\/svg>$/, "");
     return `<g transform="scale(${size / 100})">${inner}</g>`;
@@ -280,6 +284,22 @@ function nameRun(kit: BrandKit, fonts: KitFonts, text: string, x: number, baseli
         width,
       };
     }
+  }
+  if (kit.nameStyle === "letra-acento" && theme === "color") {
+    // Una sola letra en color (como la "o" roja de Mobil).
+    const chars = Array.from(text);
+    const i = accentIndex(text);
+    const before = chars.slice(0, i).join("");
+    const after = chars.slice(i + 1).join("");
+    const wb = before ? measure(fonts.heading, before, size, tracking) + tracking * size : 0;
+    const wc = measure(fonts.heading, chars[i], size, tracking) + tracking * size;
+    return {
+      svg:
+        textSvg(fonts.heading, before, left, baseline, size, ink.name, { tracking }) +
+        textSvg(fonts.heading, chars[i], left + wb, baseline, size, accentLetterColor(kitPalette(kit)), { tracking }) +
+        textSvg(fonts.heading, after, left + wb + wc, baseline, size, ink.name, { tracking }),
+      width,
+    };
   }
   if (kit.nameStyle === "dos-pesos") {
     // Primera parte en la letra gruesa de títulos; la segunda, en la delgada de textos.
@@ -319,7 +339,7 @@ function emblem(kit: BrandKit, name: string, fonts: KitFonts, theme: LogoTheme):
   const scale = kit.monogram ? 0.62 : 0.78;
   const mPath = kit.monogram ? monogramPath(fonts.heading, name, markSize, scale) : undefined;
   const mark = isModernMark(kit.mark)
-    ? `<g transform="translate(${c - 40} ${c - 40}) scale(0.8)">${modernMark(kit.mark, { a: ink, b: mixHex(ink, bg, 0.4), c: mixHex(ink, bg, 0.2), on: filled ? bg : p.primary }, { icon: kit.icon, letter: { path: markLetterPath(kit, name, fonts), char: markChar(name), family: "", weight: 400 } })}</g>`
+    ? `<g transform="translate(${c - 40} ${c - 40}) scale(0.8)">${modernMark(kit.mark, { a: ink, b: mixHex(ink, bg, 0.4), c: mixHex(ink, bg, 0.2), on: filled ? bg : p.primary }, { icon: kit.icon, letter: { path: markLetterPath(kit, name, fonts), char: markChar(name), family: "", weight: 400 }, letter2: { path: markLetterPath(kit, name, fonts, 1), char: markChar2(name), family: "", weight: 400 } })}</g>`
     : `<g transform="translate(${c - markSize / 2} ${c - markSize / 2})">${markSvg(kit, markSize, ink, { monogramPath: mPath, scale })}</g>`;
   return {
     width: S,
@@ -366,6 +386,27 @@ export async function logoArt(kit: BrandKit, name: string, variant: LogoVariant 
         { name: "Símbolo", svg: `<g transform="translate(${(w - iso) / 2} 0)">${isoLayer(kit, name, fonts, iso, theme)}</g>` },
         { name: "Nombre", svg: nameRun(kit, fonts, text, w / 2, nameBase, size, theme, "middle").svg },
         ...(caption ? [{ name: "Texto pequeño", svg: captionSvg(w / 2, nameBase + 30, 16, "middle") }] : []),
+      ],
+    };
+  }
+
+  if (kit.layout === "firma") {
+    // El nombre con un trazo curvo debajo, como una firma.
+    const size = 96;
+    const run = nameRun(kit, fonts, text, 0, cap * size, size, theme);
+    const w = Math.ceil(run.width + 8);
+    const y = cap * size + size * 0.24;
+    const stroke = theme === "color" ? accentLetterColor(kitPalette(kit)) : ink.name;
+    const swoosh = `<path d="M${w * 0.03} ${y + size * 0.05}Q${w * 0.42} ${y + size * 0.34} ${w * 0.97} ${y - size * 0.1}" fill="none" stroke="${stroke}" stroke-width="${size * 0.075}" stroke-linecap="round"/>`;
+    const captionBase = y + size * 0.3 + 22 + capB * 24;
+    const h = Math.ceil(caption ? captionBase + 6 : y + size * 0.32);
+    return {
+      width: w,
+      height: h,
+      layers: [
+        { name: "Nombre", svg: run.svg },
+        { name: "Trazo", svg: swoosh },
+        ...(caption ? [{ name: "Texto pequeño", svg: captionSvg(4, captionBase, 24, "start") }] : []),
       ],
     };
   }

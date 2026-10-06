@@ -62,16 +62,16 @@ export function KitEditor({
   const ideas: { mark: MarkId; layout: Layout; nameStyle: NameStyle }[] = [
     { mark: rec[0], layout: "clasico", nameStyle: "dos-pesos" },
     { mark: rec[0], layout: "centrado", nameStyle: "normal" },
-    { mark: rec[1], layout: "clasico", nameStyle: "minusculas" },
+    { mark: "calada-squircle", layout: "clasico", nameStyle: "dos-pesos" },
+    { mark: "monograma", layout: "centrado", nameStyle: "normal" },
     { mark: rec[1], layout: "apilado", nameStyle: "dos-tonos" },
-    { mark: "letra-squircle", layout: "clasico", nameStyle: "dos-pesos" },
     { mark: "letra-circulo", layout: "centrado", nameStyle: "mayusculas" },
-    { mark: rec[2], layout: "apilado", nameStyle: "dos-pesos" },
-    { mark: "letra-sola", layout: "palabra", nameStyle: "dos-tonos" },
-    { mark: rec[3], layout: "clasico", nameStyle: "normal" },
-    { mark: "letra-arco", layout: "centrado", nameStyle: "dos-pesos" },
-    { mark: rec[4], layout: "centrado", nameStyle: "minusculas" },
-    { mark: draft.mark, layout: "palabra", nameStyle: "dos-pesos" },
+    { mark: rec[0], layout: "firma", nameStyle: "letra-acento" },
+    { mark: rec[2], layout: "clasico", nameStyle: "minusculas" },
+    { mark: "calada-circulo", layout: "apilado", nameStyle: "dos-pesos" },
+    { mark: "letra-sola", layout: "palabra", nameStyle: "letra-acento" },
+    { mark: rec[1], layout: "clasico", nameStyle: "letra-acento" },
+    { mark: "monograma", layout: "clasico", nameStyle: "dos-pesos" },
   ];
   const set = (changes: Partial<BrandKit>) => {
     setSaved(false);
@@ -119,6 +119,21 @@ export function KitEditor({
           <span style={{ fontFamily: `"${f.heading.family}"`, fontWeight: f.heading.weight, letterSpacing: "-0.02em" }} className="text-3xl leading-none">
             {draft.slogan}
           </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-line p-4" aria-label="Prueba en tamaño pequeño">
+          <span className="text-xs text-muted">Prueba en chico:</span>
+          <span title="Ícono del navegador" className="flex size-8 items-center justify-center rounded-md bg-white">
+            <BrandLogo kit={draft} name={name} variant="isotipo" size={22} />
+          </span>
+          <span title="Foto de perfil de WhatsApp" className="flex size-14 items-center justify-center rounded-full" style={{ background: backdropCss(draft, "oscuro") }}>
+            <BrandLogo kit={draft} name={name} variant="isotipo" theme="blanco" size={30} />
+          </span>
+          <span title="Logo pequeño" className="flex h-12 w-36 items-center rounded-md bg-white px-2">
+            <Fit>
+              <BrandLogo kit={draft} name={name} size={22} />
+            </Fit>
+          </span>
+          <span className="text-xs text-muted">Si se lee aquí, se lee en todos lados.</span>
         </div>
         <div className="flex gap-2" aria-label="Colores de la marca">
           {[p.primary, p.secondary, p.accent, p.dark, p.light].map((c, i) => (

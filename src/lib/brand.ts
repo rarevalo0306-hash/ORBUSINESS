@@ -32,8 +32,8 @@ export type FontPair = {
 };
 
 export type Shape = "circle" | "rounded" | "hexagon" | "shield" | "diamond" | "ring" | "none";
-export type Layout = "clasico" | "apilado" | "centrado" | "palabra" | "emblema";
-export type NameStyle = "normal" | "minusculas" | "mayusculas" | "dos-tonos" | "dos-pesos";
+export type Layout = "clasico" | "apilado" | "centrado" | "palabra" | "firma" | "emblema";
+export type NameStyle = "normal" | "minusculas" | "mayusculas" | "dos-tonos" | "dos-pesos" | "letra-acento";
 // Fondo gráfico de la marca (redes, papelería, página): moderno y sin cosas repetidas.
 export type Pattern = "aurora" | "formas" | "lineas" | "puntos" | "limpio";
 export type { MarkId } from "@/lib/brand-marks";
@@ -136,6 +136,7 @@ export const LAYOUTS: { id: Layout; label: string; note: string }[] = [
   { id: "centrado", label: "Centrado", note: "El símbolo arriba y el nombre debajo" },
   { id: "apilado", label: "Apilado", note: "El nombre en dos líneas junto al símbolo" },
   { id: "palabra", label: "Solo nombre", note: "El nombre es el logo, con un detalle de color" },
+  { id: "firma", label: "Nombre con trazo", note: "El nombre con un trazo curvo debajo, como una firma" },
 ];
 
 export const NAME_STYLES: { id: NameStyle; label: string }[] = [
@@ -144,6 +145,7 @@ export const NAME_STYLES: { id: NameStyle; label: string }[] = [
   { id: "mayusculas", label: "MAYÚSCULAS" },
   { id: "dos-tonos", label: "Dos colores" },
   { id: "dos-pesos", label: "Gruesa + delgada" },
+  { id: "letra-acento", label: "Una letra de color" },
 ];
 
 export const PATTERNS: { id: Pattern; label: string }[] = [
@@ -331,6 +333,19 @@ export function logoName(kit: Pick<BrandKit, "nameStyle" | "fonts">, name: strin
   return name;
 }
 
+// Letra que va en color (como la "o" roja de Mobil): la primera "o"; si no hay, la primera vocal
+// después de la primera letra.
+export function accentIndex(text: string) {
+  const chars = Array.from(text);
+  const o = chars.findIndex((c, i) => i > 0 && /[oóOÓ]/.test(c));
+  if (o > 0) return o;
+  const v = chars.findIndex((c, i) => i > 0 && /[aeiouáéíóú]/i.test(c));
+  return v > 0 ? v : 0;
+}
+
+// Color de esa letra: el acento si se distingue sobre fondo claro; si no, el color principal.
+export const accentLetterColor = (p: Palette) => (contrast(p.accent, "#FFFFFF") >= 2.4 ? p.accent : p.primary);
+
 // Espacio entre letras del nombre: apretado (moderno) o abierto en mayúsculas.
 export const nameTracking = (kit: Pick<BrandKit, "nameStyle">) => (kit.nameStyle === "mayusculas" ? 0.06 : -0.025);
 
@@ -416,10 +431,12 @@ export function markColors(kit: BrandKit, theme: "color" | "blanco" | "mono" = "
 
 // Letra principal del símbolo (la inicial del nombre).
 export const markChar = (name: string) => initials(name).charAt(0) || "A";
+// Segunda inicial (monograma). Si el nombre tiene una sola palabra, la segunda letra del nombre.
+export const markChar2 = (name: string) => initials(name).charAt(1) || name.replace(/[^\p{L}]/gu, "").charAt(1).toUpperCase() || markChar(name);
 
 export function isotypeSvg(
   kit: BrandKit,
-  opts: { size?: number; mono?: string; monogramPath?: string; initials?: string; letterPath?: string; theme?: "color" | "blanco" | "mono" } = {},
+  opts: { size?: number; mono?: string; monogramPath?: string; initials?: string; letterPath?: string; letterPath2?: string; theme?: "color" | "blanco" | "mono" } = {},
 ) {
   const size = opts.size ?? 100;
   if (isModernMark(kit.mark)) {
@@ -428,6 +445,7 @@ export function isotypeSvg(
     const inner = modernMark(kit.mark, markColors(kit, theme), {
       icon: kit.icon,
       letter: { path: opts.letterPath, char: markChar(opts.initials ?? "A"), family: f.family, weight: f.weight },
+      letter2: { path: opts.letterPath2, char: markChar2(opts.initials ?? "A"), family: f.family, weight: f.weight },
     });
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${size}" height="${size}">${inner}</svg>`;
   }
@@ -599,7 +617,7 @@ export function rulesKits(b: BusinessForKit): BrandKit[] {
   const designs: Omit<BrandKit, "proposition" | "slogan" | "caption" | "palette" | "icon">[] = [
     { name: "Inicial con presencia", concept: "La inicial del negocio dentro de un cuadro suave, con letra moderna y nombre en minúsculas: se reconoce de lejos y se ve actual en redes y en el local.", personality: ["Confiable", "Práctico", "Actual"], tone: "Claro y directo, con buen trato.", fonts: "jakarta", mark: hasConcept ? concept[0].id : "letra-squircle", shape: "rounded", monogram: false, layout: "clasico", nameStyle: "dos-pesos", pattern: "aurora" },
     { name: "Formas que crecen", concept: "Un símbolo geométrico simple, como las marcas de diseño de hoy, y el nombre en dos líneas: ordenado, profesional y fácil de recordar.", personality: ["Profesional", "Moderno", "Atento"], tone: "Profesional pero cálido.", fonts: "grotesca", mark: hasConcept && concept[1] ? concept[1].id : "arco", shape: "rounded", monogram: false, layout: "apilado", nameStyle: "normal", pattern: "formas" },
-    { name: "El nombre manda", concept: "El nombre es el logo, con letra con carácter y un punto de color: directo, seguro y muy fácil de usar en todo.", personality: ["Cercano", "Seguro", "Alegre"], tone: "Cercano, como un vecino de confianza.", fonts: "display", mark: "letra-circulo", shape: "circle", monogram: false, layout: "palabra", nameStyle: "dos-tonos", pattern: "lineas" },
+    { name: "El nombre manda", concept: "El nombre es el logo, con una letra de color y un trazo como firma: directo, seguro y fácil de reconocer hasta en un letrero lejano.", personality: ["Cercano", "Seguro", "Alegre"], tone: "Cercano, como un vecino de confianza.", fonts: "display", mark: "monograma", shape: "circle", monogram: false, layout: "firma", nameStyle: "letra-acento", pattern: "lineas" },
   ];
   return designs.map((d, i) => ({
     ...d,
@@ -700,7 +718,7 @@ function sanitizeBase(v: unknown, fallback: BrandBase | null): BrandBase | null 
 export function sanitizeKit(k: Partial<BrandKit>, fallback: BrandKit): BrandKit {
   const colors = k.colors === undefined ? (fallback.colors ?? null) : fixColors(k.colors);
   const fonts = FONT_PAIRS.some((f) => f.id === k.fonts) ? k.fonts! : fallback.fonts;
-  const nameStyle = oneOf(k.nameStyle, ["normal", "minusculas", "mayusculas", "dos-tonos", "dos-pesos"] as const, fallback.nameStyle ?? "normal");
+  const nameStyle = oneOf(k.nameStyle, ["normal", "minusculas", "mayusculas", "dos-tonos", "dos-pesos", "letra-acento"] as const, fallback.nameStyle ?? "normal");
   const marks = MARKS.map((m) => m.id);
   const curated = PALETTES.some((p) => p.id === k.palette) ? k.palette! : PALETTES.some((p) => p.id === fallback.palette) ? fallback.palette : PALETTES[0].id;
   return {
@@ -718,7 +736,7 @@ export function sanitizeKit(k: Partial<BrandKit>, fallback: BrandKit): BrandKit 
     icon: k.icon && BRAND_ICONS[k.icon] ? k.icon : fallback.icon,
     shape: oneOf(k.shape, ["circle", "rounded", "hexagon", "shield", "diamond", "ring", "none"] as const, fallback.shape),
     monogram: typeof k.monogram === "boolean" ? k.monogram : fallback.monogram,
-    layout: oneOf(k.layout, ["clasico", "apilado", "centrado", "palabra"] as const, fallback.layout === "emblema" ? "centrado" : (fallback.layout ?? "clasico")),
+    layout: oneOf(k.layout, ["clasico", "apilado", "centrado", "palabra", "firma"] as const, fallback.layout === "emblema" ? "centrado" : (fallback.layout ?? "clasico")),
     nameStyle: nameStyle === "mayusculas" && fontsById(fonts).script ? "normal" : nameStyle,
     pattern: oneOf(k.pattern, ["aurora", "formas", "lineas", "puntos", "limpio"] as const, oneOf(fallback.pattern, ["aurora", "formas", "lineas", "puntos", "limpio"] as const, "aurora")),
     base: sanitizeBase(k.base, k.base === null ? null : (fallback.base ?? null)),

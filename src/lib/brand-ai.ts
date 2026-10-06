@@ -72,6 +72,15 @@ export async function proposeKits(b: Business, services: { name: string }[]): Pr
       "Inventa una paleta moderna para cada propuesta (5 colores HEX): primary (color de marca profundo, el texto blanco debe leerse encima), " +
       "secondary (tono suave que combine), accent (un acento vivo y actual), dark (casi negro con un toque del color) y light (fondo cálido casi blanco). " +
       "Las 3 paletas deben ser claramente distintas. " +
+      "Aplica los principios de los grandes diseñadores de logos: " +
+      "SIMPLEZA (como el Swoosh de Nike: un símbolo que se recuerda y se puede dibujar de memoria); " +
+      "ESPACIO NEGATIVO (como la flecha escondida de FedEx: usa 'calada-squircle' o 'calada-circulo' para que la inicial quede hueca); " +
+      "TIPOGRAFÍA CON IDEA (como las ligaduras de Herb Lubalin: usa 'monograma' para entrelazar las iniciales); " +
+      "UN SOLO DETALLE DE COLOR (como la 'o' roja de Mobil: nameStyle 'letra-acento'); " +
+      "PENSAR DÓNDE SE VA A VER (como Dalí con Chupa Chups: el logo debe leerse en chiquito, en la foto de perfil de WhatsApp, en el letrero y en el empaque; " +
+      "si el nombre es largo, más de 18 letras, usa estilo 'apilado' o 'centrado'); " +
+      "y LA MARCA NACE DE CONOCER EL NEGOCIO (como Walter Landor). " +
+      "En 'concept' explica la idea del logo y POR QUÉ representa a este negocio, usando lo que contó el dueño en la entrevista (giro, zona, lo que vende, cómo atiende, sus clientes). " +
       "Símbolo: en al menos una propuesta usa un símbolo con concepto relacionado con el giro (los primeros de la lista); " +
       "en otra, uno con la inicial; y en la tercera, el estilo 'palabra' o una forma geométrica. No repitas el mismo símbolo. " +
       "Estilo del nombre: 'dos-pesos' (primera palabra gruesa y la segunda delgada) se ve muy actual. " +
@@ -86,12 +95,12 @@ export async function proposeKits(b: Business, services: { name: string }[]): Pr
         .join("; ")}.`,
       `Íconos (solo para los símbolos icono-*): ${icons.join(", ")}.`,
       `Estilos de logo: ${LAYOUTS.map((l) => `${l.id} (${l.note})`).join(", ")}.`,
-      `Estilos del nombre: ${NAME_STYLES.map((n) => n.id).join(", ")} (dos-tonos = la segunda parte del nombre en el color de la marca).`,
+      `Estilos del nombre: ${NAME_STYLES.map((n) => n.id).join(", ")} (dos-tonos = la segunda parte del nombre en el color de la marca; dos-pesos = primera palabra gruesa y segunda delgada; letra-acento = una sola letra en color).`,
       `Fondos: ${PATTERNS.map((p) => `${p.id} (${p.label})`).join(", ")}.`,
     ].join("\n"),
     schema: KitsSchema,
     jsonHint:
-      'Formato: {"kits": [{"name": "nombre corto y creativo de la propuesta", "concept": "la idea creativa y por qué le funciona a este negocio (2 oraciones)", ' +
+      'Formato: {"kits": [{"name": "nombre corto y creativo de la propuesta", "concept": "la idea del logo y por qué representa a este negocio, con datos de la entrevista (2-3 oraciones)", ' +
       '"proposition": "propuesta de valor (1 oración)", "personality": ["3 adjetivos"], "tone": "tono de voz (1 oración)", "slogan": "eslogan", ' +
       '"caption": "Giro · Zona", "colors": {"primary": "#1F3A5F", "secondary": "#F2A900", "accent": "#E4572E", "dark": "#14202E", "light": "#F5F3EE"}, ' +
       '"fonts": "id", "mark": "id", "icon": "id", "layout": "id", "nameStyle": "id", "pattern": "id"}, ...]} con exactamente 3 kits.',

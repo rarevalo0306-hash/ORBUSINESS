@@ -8,7 +8,10 @@ import {
   kitPalette,
   logoName,
   markChar,
+  markChar2,
   markSvg,
+  accentIndex,
+  accentLetterColor,
   mixHex,
   nameTracking,
   onColor,
@@ -47,7 +50,7 @@ function emblemSvg(kit: BrandKit, name: string, theme: Theme) {
     : `<circle cx="120" cy="120" r="117" fill="none" stroke="#FFFFFF" stroke-width="6"/>`;
   const scale = kit.monogram ? 0.62 : 0.78;
   const mark = isModernMark(kit.mark)
-    ? `<g transform="translate(80 80) scale(0.8)">${modernMark(kit.mark, { a: ink, b: mixHex(ink, bg, 0.4), c: mixHex(ink, bg, 0.2), on: filled ? bg : p.primary }, { icon: kit.icon, letter: { char: markChar(name), family: f.heading.family, weight: f.heading.weight } })}</g>`
+    ? `<g transform="translate(80 80) scale(0.8)">${modernMark(kit.mark, { a: ink, b: mixHex(ink, bg, 0.4), c: mixHex(ink, bg, 0.2), on: filled ? bg : p.primary }, { icon: kit.icon, letter: { char: markChar(name), family: f.heading.family, weight: f.heading.weight }, letter2: { char: markChar2(name), family: f.heading.family, weight: f.heading.weight } })}</g>`
     : `<g transform="translate(72 72)">${markSvg(kit, 96, ink, { initials: initials(name), scale })}</g>`;
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="100%" height="100%">` +
@@ -97,7 +100,7 @@ export function BrandLogo({
   const p = kitPalette(kit);
   const f = fontsById(kit.fonts);
   const ink = inks(kit, theme);
-  const iso = isotypeSvg(kit, { size, mono: ink.mono, initials: initials(name) });
+  const iso = isotypeSvg(kit, { size, mono: ink.mono, initials: name });
   const text = logoName(kit, name);
   const upper = kit.nameStyle === "mayusculas";
   const nameStyle: CSSProperties = {
@@ -125,6 +128,17 @@ export function BrandLogo({
     ) : null;
   const lightStyle: CSSProperties = { fontFamily: `"${f.body.family}", system-ui, sans-serif`, fontWeight: f.body.weight };
   const twoTone = (t: string) => {
+    if (kit.nameStyle === "letra-acento" && theme === "color") {
+      const chars = Array.from(t);
+      const i = accentIndex(t);
+      return (
+        <>
+          {chars.slice(0, i).join("")}
+          <span style={{ color: accentLetterColor(p) }}>{chars[i]}</span>
+          {chars.slice(i + 1).join("")}
+        </>
+      );
+    }
     const [a, b] = splitName(t);
     if (!b) return t;
     if (kit.nameStyle === "dos-pesos") {
@@ -154,6 +168,19 @@ export function BrandLogo({
         <Svg html={iso} size={size} />
         <span style={{ ...nameStyle, fontSize: size * 0.48 }}>{twoTone(text)}</span>
         {captionEl(size * 0.13)}
+      </span>
+    );
+  }
+
+  if (kit.layout === "firma" && !compact) {
+    const stroke = theme === "color" ? accentLetterColor(p) : ink.name;
+    return (
+      <span role="img" aria-label={label} className={`inline-flex flex-col ${className}`} style={{ gap: size * 0.06 }}>
+        <span style={{ ...nameStyle, fontSize: size * 0.8 }}>{twoTone(text)}</span>
+        <svg viewBox="0 0 100 14" preserveAspectRatio="none" aria-hidden style={{ width: "100%", height: size * 0.22, overflow: "visible" }}>
+          <path d="M3 5Q42 15 97 1" fill="none" stroke={stroke} strokeWidth={size * 0.06} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+        </svg>
+        {captionEl(size * 0.17)}
       </span>
     );
   }

@@ -39,6 +39,9 @@ export type MarkId =
   | "letra-squircle"
   | "letra-arco"
   | "letra-sola"
+  | "calada-circulo"
+  | "calada-squircle"
+  | "monograma"
   | "icono-duo"
   | "icono-squircle"
   | "clasico"; // estilo anterior (forma + ícono), se conserva para kits viejos
@@ -70,6 +73,9 @@ export const MARKS: MarkInfo[] = [
   { id: "letra-squircle", label: "Letra en cuadro suave", kind: "letra" },
   { id: "letra-arco", label: "Letra en arco", kind: "letra" },
   { id: "letra-sola", label: "Letra con punto", kind: "letra" },
+  { id: "calada-squircle", label: "Letra calada (espacio negativo)", kind: "letra" },
+  { id: "calada-circulo", label: "Letra calada en círculo", kind: "letra" },
+  { id: "monograma", label: "Monograma entrelazado", kind: "letra" },
   { id: "arco", label: "Arco y sol", kind: "forma" },
   { id: "circulos", label: "Dos círculos", kind: "forma" },
   { id: "medialuna", label: "Círculo partido", kind: "forma" },
@@ -93,6 +99,13 @@ export type MarkColors = {
 // Letra: en el servidor viene como trazo ya centrado en el cuadro de 100; en pantalla como <text>.
 export type MarkLetter = { path?: string; char: string; family: string; weight: number; dy?: number };
 
+// Para las letras caladas y el monograma, cada símbolo necesita su propia máscara/identificador.
+const hashId = (t: string) => {
+  let h = 0;
+  for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0;
+  return `mk${(h >>> 0).toString(36)}`;
+};
+
 function letterSvg(letter: MarkLetter, color: string, size: number, cx = 50, cy = 50) {
   if (letter.path) return `<path d="${letter.path}" fill="${color}"/>`;
   const safe = letter.char.replace(/[<>&"']/g, "");
@@ -104,7 +117,9 @@ function iconSvg(icon: string, color: string, box: number, x: number, y: number,
 }
 
 // Tamaño de la letra (en el cuadro de 100) según el símbolo.
-export const letterSize = (mark: MarkId) => (mark === "letra-sola" ? 96 : mark === "letra-arco" ? 52 : 58);
+export const letterSize = (mark: MarkId) => (mark === "letra-sola" ? 96 : mark === "letra-arco" ? 52 : mark === "monograma" ? 66 : mark.startsWith("calada") ? 64 : 58);
+// Monograma: centros horizontales de las dos iniciales.
+export const MONO_X: [number, number] = [37, 63];
 // Centro vertical de la letra (el arco la baja un poco).
 export const letterCenter = (mark: MarkId) => (mark === "letra-arco" ? 60 : mark === "letra-sola" ? 50 : 50);
 
@@ -185,7 +200,7 @@ export function marksFor(industry: string | null): MarkInfo[] {
 }
 
 // SVG interno del símbolo (sin la etiqueta <svg>) en un cuadro de 100 × 100.
-export function modernMark(mark: MarkId, colors: MarkColors, opts: { icon: string; letter: MarkLetter }) {
+export function modernMark(mark: MarkId, colors: MarkColors, opts: { icon: string; letter: MarkLetter; letter2?: MarkLetter }) {
   const { a, b, c, on } = colors;
   const L = opts.letter;
   if (isConceptMark(mark)) return conceptMark(mark, colors);
@@ -210,6 +225,24 @@ export function modernMark(mark: MarkId, colors: MarkColors, opts: { icon: strin
       return `<path d="${ARCH}" fill="${a}"/>${letterSvg(L, on, letterSize(mark), 50, letterCenter(mark))}`;
     case "letra-sola":
       return `${letterSvg(L, a, letterSize(mark))}<circle cx="88" cy="86" r="9" fill="${b}"/>`;
+    case "calada-circulo":
+    case "calada-squircle": {
+      // Espacio negativo: la letra queda hueca (se ve el fondo a través de ella).
+      const id = hashId(`${mark}|${L.path ?? L.char + L.family}`);
+      const shape = mark === "calada-circulo" ? `<circle cx="50" cy="50" r="50"/>` : `<path d="${SQUIRCLE}"/>`;
+      return `<defs><mask id="${id}" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100"><rect width="100" height="100" fill="#fff"/>${letterSvg(L, "#000", letterSize(mark))}</mask></defs><g fill="${a}" mask="url(#${id})">${shape}</g><circle cx="${mark === "calada-circulo" ? 84 : 88}" cy="${mark === "calada-circulo" ? 84 : 88}" r="9" fill="${b}"/>`;
+    }
+    case "monograma": {
+      // Dos iniciales entrelazadas: la segunda se separa de la primera con un contorno del color de fondo.
+      const L2 = opts.letter2 ?? L;
+      const first = L.path ? `<path d="${L.path}" fill="${a}"/>` : letterSvg(L, a, letterSize(mark), MONO_X[0], 50);
+      // El contorno se dibuja primero (sin relleno) y la letra encima: funciona igual en PNG, PDF y pantalla.
+      const halo = L2.path
+        ? `<path d="${L2.path}" fill="none" stroke="${on}" stroke-width="9" stroke-linejoin="round"/>`
+        : letterSvg(L2, "none", letterSize(mark), MONO_X[1], 50).replace("<text ", `<text stroke="${on}" stroke-width="9" stroke-linejoin="round" `);
+      const second = L2.path ? `<path d="${L2.path}" fill="${b}"/>` : letterSvg(L2, b, letterSize(mark), MONO_X[1], 50);
+      return first + halo + second;
+    }
     case "icono-duo":
       return `<circle cx="60" cy="60" r="38" fill="${b}"/>${iconSvg(opts.icon, a, 66, 13, 13, 2.4)}`;
     case "icono-squircle":
