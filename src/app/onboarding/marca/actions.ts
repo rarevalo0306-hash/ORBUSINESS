@@ -120,13 +120,14 @@ async function draw(supabase: Supabase, userId: string, b: { id: string; industr
 export async function generateKits() {
   const { supabase, user, business } = await requireBusiness();
   const { data: services } = await supabase.from("services").select("name").eq("business_id", business.id).order("sort");
-  // Los símbolos se piden uno tras otro (Recraft limita los pedidos simultáneos).
-  const kits: BrandKit[] = [];
-  for (const kit of await proposeKits(business, services ?? [])) {
-    // 2 símbolos por propuesta (en un solo pedido): el primero va en la propuesta, el otro queda como opción.
-    const symbols = await draw(supabase, user.id, business, kit, SYMBOLS_PER_PROPOSAL);
-    kits.push(symbols.length ? { ...kit, mark: "ia" as const, aiMark: symbols[0], aiChoices: symbols } : kit);
-  }
+  // Los símbolos de las 3 propuestas se piden a la vez (si Recraft pide esperar, se reintenta con pausas).
+  // 2 símbolos por propuesta en un solo pedido: el primero va en la propuesta, el otro queda como opción.
+  const kits = await Promise.all(
+    (await proposeKits(business, services ?? [])).map(async (kit): Promise<BrandKit> => {
+      const symbols = await draw(supabase, user.id, business, kit, SYMBOLS_PER_PROPOSAL);
+      return symbols.length ? { ...kit, mark: "ia", aiMark: symbols[0], aiChoices: symbols } : kit;
+    }),
+  );
   const { error } = await supabase
     .from("businesses")
     .update({ brand_options: kits as unknown as Json })

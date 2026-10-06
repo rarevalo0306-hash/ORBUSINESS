@@ -185,6 +185,26 @@ function extractMain(key: QuestionKey, out: Answer, b: B): Extraction {
 
 // DEEPSEEK_BASE_URL permite usar DeepSeek desde otro proveedor compatible (por ejemplo, con servidores en EE.UU.).
 const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com";
+// El "modo pensar" de DeepSeek viene activado y hace las respuestas muy lentas (y a veces las corta).
+// Nuna responde mejor y más rápido sin él. Con DEEPSEEK_THINKING=enabled se vuelve a activar.
+const deepseekThinking = () => ({ type: process.env.DEEPSEEK_THINKING === "enabled" ? "enabled" : "disabled" });
+
+// Pedido a DeepSeek. Si rechaza la opción "thinking" (algún proveedor compatible no la conoce),
+// se repite sin ella.
+async function deepseekFetch(body: Record<string, unknown>, timeoutMs: number) {
+  const send = (b: Record<string, unknown>) =>
+    fetch(`${DEEPSEEK_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}` },
+      body: JSON.stringify(b),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  const res = await send(body);
+  if (res.status !== 400 || !("thinking" in body)) return res;
+  const { thinking: _ignored, ...rest } = body;
+  void _ignored;
+  return send(rest);
+}
 const JSON_EXAMPLE =
   '{"understood": true, "reply": "Anotado.", "text_value": "Ferretería El Martillo", "bool_value": null, "business_type": null, "country": null, "payment_timing": null, "services": null, "currency_choice": null, "payment_methods": null, "address_form": null, "business_name": null}';
 
@@ -199,16 +219,12 @@ async function askDeepSeek(key: QuestionKey, answer: string, b: B): Promise<Answ
 }
 
 async function askDeepSeekOnce(key: QuestionKey, answer: string, b: B): Promise<Answer> {
-  const response = await fetch(`${DEEPSEEK_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-    },
-    body: JSON.stringify({
+  const response = await deepseekFetch(
+    {
       model: process.env.DEEPSEEK_MODEL || "deepseek-flash",
       max_tokens: 2000,
       response_format: { type: "json_object" },
+      thinking: deepseekThinking(),
       messages: [
         {
           role: "system",
@@ -222,9 +238,9 @@ async function askDeepSeekOnce(key: QuestionKey, answer: string, b: B): Promise<
         },
         { role: "user", content: userPrompt(key, answer, b) },
       ],
-    }),
-    signal: AbortSignal.timeout(30_000),
-  });
+    },
+    30_000,
+  );
   if (!response.ok) throw new Error(`DeepSeek respondió ${response.status}: ${await response.text()}`);
 
   const data = (await response.json()) as { choices?: { message?: { content?: string | null } }[] };
@@ -275,21 +291,20 @@ export async function aiJson<T>(opts: {
       return response.parsed_output ?? null;
     }
     for (let attempt = 0; attempt < 2; attempt++) {
-      const response = await fetch(`${DEEPSEEK_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}` },
-        body: JSON.stringify({
+      const response = await deepseekFetch(
+        {
           model: process.env.DEEPSEEK_MODEL || "deepseek-flash",
           max_tokens: opts.maxTokens ?? 4000,
           ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
           response_format: { type: "json_object" },
+          thinking: deepseekThinking(),
           messages: [
             { role: "system", content: `${opts.system}\n\nResponde solo con un objeto json. ${opts.jsonHint}` },
             { role: "user", content: opts.user },
           ],
-        }),
-        signal: AbortSignal.timeout(90_000),
-      });
+        },
+        90_000,
+      );
       if (!response.ok) throw new Error(`DeepSeek respondió ${response.status}: ${await response.text()}`);
       const data = (await response.json()) as { choices?: { message?: { content?: string | null } }[] };
       const content = data.choices?.[0]?.message?.content;
