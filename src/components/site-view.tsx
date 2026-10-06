@@ -124,6 +124,8 @@ type Ctx = {
   photo: string | null;
   h1: string;
   h2: string;
+  headline: string;
+  intro: string;
 };
 
 function Logo({ c, onDark = false, size = 40 }: { c: Ctx; onDark?: boolean; size?: number }) {
@@ -140,7 +142,7 @@ function Logo({ c, onDark = false, size = 40 }: { c: Ctx; onDark?: boolean; size
   if (kit) {
     return (
       <Fit align="start" className="max-w-xs sm:max-w-md">
-        <BrandLogo kit={kit} name={site.name} size={size} compact theme={onDark ? "blanco" : "color"} />
+        <BrandLogo kit={kit} name={site.name} size={size} compact theme={onDark ? "oscuro" : "color"} />
       </Fit>
     );
   }
@@ -182,10 +184,63 @@ function Visual({ c, className = "" }: { c: Ctx; className?: string }) {
     return <img src={c.photo} alt={`${c.site.name}`} className={`h-full w-full object-cover ${className}`} />;
   }
   return (
-    <div className={`flex h-full w-full flex-col items-center justify-center gap-5 p-8 text-center text-[var(--on-hero)] ${className}`} style={{ background: "var(--hero)" }}>
-      {c.kit ? <BrandLogo kit={c.kit} name={c.site.name} variant="isotipo" theme="blanco" size={96} /> : <span className="text-6xl font-bold [font-family:var(--heading)]">{c.initials}</span>}
-      <span className="max-w-sm text-2xl font-semibold leading-tight tracking-tight [font-family:var(--heading)]">{c.kit?.slogan ?? c.site.tagline}</span>
+    <div className={`flex h-full w-full items-center justify-center p-8 text-[var(--on-hero)] ${className}`} style={{ background: "var(--hero)" }}>
+      {c.kit ? (
+        <BrandLogo kit={c.kit} name={c.site.name} variant="isotipo" theme="oscuro" size={160} />
+      ) : (
+        <span className="text-8xl font-bold tracking-tight [font-family:var(--heading)]">{c.initials}</span>
+      )}
     </div>
+  );
+}
+
+// Portada a pantalla completa sin foto: el fondo de la marca con el símbolo grande a un lado,
+// lejos del título (en celular queda tenue detrás).
+function HeroBackdrop({ c }: { c: Ctx }) {
+  return (
+    <div className="absolute inset-0 overflow-hidden" style={{ background: "var(--hero)" }} aria-hidden>
+      <div className="absolute -right-24 -top-10 opacity-20 md:right-12 md:top-1/2 md:-translate-y-1/2 md:opacity-100 lg:right-16">
+        {c.kit ? (
+          <BrandLogo kit={c.kit} name={c.site.name} variant="isotipo" theme="oscuro" size={360} />
+        ) : (
+          <span className="block text-[18rem] font-bold leading-none tracking-tighter text-white/15 [font-family:var(--heading)]">{c.initials}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Lo que hace distinto al negocio (entrega, crédito, horario, respuesta rápida).
+const HIGHLIGHT_ICONS: Record<string, string> = {
+  entrega: "M3 7h11v9H3zM14 10h4l3 3v3h-7M7.5 19.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM17.5 19.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z",
+  credito: "M3 7h18v10H3zM3 11h18M7 15h3",
+  horario: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5l3 2",
+  chat: "M7.9 20A9 9 0 1 0 4 16.1L2 22Z",
+  visita: "M3 11l9-7 9 7v9H3zM9 20v-6h6v6",
+  fijo: "M4 5h16v15H4zM4 10h16M9 3v4M15 3v4",
+};
+
+function Highlights({ c }: { c: Ctx }) {
+  const items = c.site.highlights ?? [];
+  if (items.length < 2) return null;
+  return (
+    <section className={`${shell} py-10 sm:py-14`}>
+      <ul className={`grid grid-cols-2 gap-3 ${items.length >= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+        {items.map((h) => (
+          <li key={h.title} className={`${card} flex flex-col gap-3 p-4 sm:gap-4 sm:p-6`}>
+            <span className="flex size-11 items-center justify-center rounded-[var(--r)] bg-[var(--btn)] text-[var(--on-btn)]">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="size-5" aria-hidden>
+                <path d={HIGHLIGHT_ICONS[h.icon] ?? HIGHLIGHT_ICONS.chat} />
+              </svg>
+            </span>
+            <span className="flex flex-col gap-1">
+              <span className="font-semibold tracking-tight [font-family:var(--heading)] sm:text-lg">{h.title}</span>
+              <span className="text-sm text-[var(--muted)] sm:text-base">{h.text}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -200,8 +255,8 @@ function Hero({ c }: { c: Ctx }) {
         <section className="relative overflow-hidden">
           <div className={`${shell} flex flex-col items-center gap-7 py-20 text-center sm:py-28`}>
             <p className={eyebrow}>{label}</p>
-            <h1 className={`${c.h1} max-w-4xl`}>{site.tagline}</h1>
-            <p className="max-w-2xl text-lg text-[var(--muted)]">{site.intro}</p>
+            <h1 className={`${c.h1} max-w-4xl`}>{c.headline}</h1>
+            <p className="max-w-2xl text-lg text-[var(--muted)]">{c.intro}</p>
             <Ctas c={c} center />
             {infoItems(site).length > 0 && (
               <ul className="mt-4 flex flex-wrap justify-center gap-2">
@@ -219,12 +274,18 @@ function Hero({ c }: { c: Ctx }) {
       return (
         <section className={`${shell} pt-2`}>
           <div className="relative min-h-[560px] sm:min-h-[640px] overflow-hidden rounded-[var(--rl)]">
-            <Visual c={c} className="absolute inset-0" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/50 to-black/15" />
+            {c.photo ? (
+              <>
+                <Visual c={c} className="absolute inset-0" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/50 to-black/15" />
+              </>
+            ) : (
+              <HeroBackdrop c={c} />
+            )}
             <div className="relative flex min-h-[560px] sm:min-h-[640px] flex-col justify-end gap-5 p-6 text-white sm:p-12">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/80">{label}</p>
-              <h1 className={`${c.h1} max-w-3xl`}>{site.tagline}</h1>
-              <p className="max-w-xl text-lg text-white/85">{site.intro}</p>
+              <h1 className={`${c.h1} max-w-3xl`}>{c.headline}</h1>
+              <p className="max-w-xl text-lg text-white/85">{c.intro}</p>
               <Ctas c={c} light />
             </div>
           </div>
@@ -234,9 +295,9 @@ function Hero({ c }: { c: Ctx }) {
       return (
         <section className={`${shell} flex flex-col gap-10 py-14 sm:py-20`}>
           <p className={eyebrow}>{label}</p>
-          <h1 className={c.h1}>{site.tagline}</h1>
+          <h1 className={c.h1}>{c.headline}</h1>
           <div className="grid gap-6 border-t border-[var(--line)] pt-8 md:grid-cols-[1.4fr_1fr] md:items-end">
-            <p className="max-w-xl text-lg text-[var(--muted)]">{site.intro}</p>
+            <p className="max-w-xl text-lg text-[var(--muted)]">{c.intro}</p>
             <div className="md:justify-self-end">
               <Ctas c={c} />
             </div>
@@ -251,8 +312,8 @@ function Hero({ c }: { c: Ctx }) {
         <section className="relative overflow-hidden px-5 py-16 sm:px-8 sm:py-24" style={{ background: "var(--hero)" }}>
           <div className={`${card} relative mx-auto flex max-w-2xl flex-col gap-6 p-7 shadow-2xl sm:p-12`}>
             <p className={eyebrow}>{label}</p>
-            <h1 className={c.h2.replace("text-3xl", "text-4xl")}>{site.tagline}</h1>
-            <p className="text-lg text-[var(--muted)]">{site.intro}</p>
+            <h1 className={c.h2.replace("text-3xl", "text-4xl")}>{c.headline}</h1>
+            <p className="text-lg text-[var(--muted)]">{c.intro}</p>
             <Ctas c={c} />
             {infoItems(site).length > 0 && (
               <dl className="grid gap-3 border-t border-[var(--line)] pt-6 sm:grid-cols-2">
@@ -273,8 +334,8 @@ function Hero({ c }: { c: Ctx }) {
           <div className={`${card} flex flex-col justify-between gap-8 p-7 sm:p-10 md:col-span-2 md:row-span-2`}>
             <p className={eyebrow}>{label}</p>
             <div className="flex flex-col gap-5">
-              <h1 className={c.h2.replace("text-3xl", "text-4xl")}>{site.tagline}</h1>
-              <p className="text-[var(--muted)]">{site.intro}</p>
+              <h1 className={c.h2.replace("text-3xl", "text-4xl")}>{c.headline}</h1>
+              <p className="text-[var(--muted)]">{c.intro}</p>
               <Ctas c={c} />
             </div>
           </div>
@@ -303,8 +364,8 @@ function Hero({ c }: { c: Ctx }) {
         <section className={`${shell} grid items-center gap-10 py-14 md:grid-cols-2 md:py-20`}>
           <div className="flex flex-col gap-6">
             <p className={eyebrow}>{label}</p>
-            <h1 className={c.h1}>{site.tagline}</h1>
-            <p className="text-lg text-[var(--muted)]">{site.intro}</p>
+            <h1 className={c.h1}>{c.headline}</h1>
+            <p className="text-lg text-[var(--muted)]">{c.intro}</p>
             <Ctas c={c} />
           </div>
           <div className="aspect-[4/3] overflow-hidden rounded-[var(--rl)] md:aspect-square">
@@ -329,7 +390,7 @@ function Services({ c }: { c: Ctx }) {
   const header = (
     <div className="flex flex-col gap-3">
       <p className={eyebrow}>Lo que ofrecemos</p>
-      <h2 className={c.h2}>{site.services.some((x) => x.price != null) ? "Productos y precios" : "Lo que hacemos"}</h2>
+      <h2 className={c.h2}>{site.services.some((x) => x.price != null) ? (site.kind === "products" ? "Productos y precios" : "Servicios y precios") : site.kind === "products" ? "Lo que vendemos" : "Lo que hacemos"}</h2>
       {note}
     </div>
   );
@@ -433,7 +494,7 @@ function About({ c }: { c: Ctx }) {
     <section id="nosotros" className={`${shell} grid scroll-mt-6 gap-10 py-16 sm:py-24 md:grid-cols-2`}>
       <div className="flex flex-col gap-4">
         <p className={eyebrow}>Quiénes somos</p>
-        <h2 className={c.h2}>{c.kit!.slogan}</h2>
+        <h2 className={c.h2}>{base.promise || c.kit!.slogan}</h2>
       </div>
       <div className="flex flex-col gap-6">
         <p className="text-lg leading-relaxed text-[var(--muted)]">{base.story}</p>
@@ -574,6 +635,16 @@ function Contact({ c, leadForm }: { c: Ctx; leadForm?: ReactNode }) {
 
 // ---------- Página ----------
 
+// El kit guarda el nombre de la propuesta ("Arevalo Tuerca"); en la página se habla del negocio.
+function withBusinessName(kit: BrandKit, name: string): BrandKit {
+  if (!kit.base || !kit.name || kit.name === name) return kit;
+  const fix = (t: string) => t.split(kit.name).join(name);
+  return {
+    ...kit,
+    base: { ...kit.base, story: fix(kit.base.story), promise: fix(kit.base.promise), values: kit.base.values.map((v) => ({ ...v, text: fix(v.text) })) },
+  };
+}
+
 function whatsappLink(phone: string, name: string) {
   const text = encodeURIComponent(`Hola ${name}, quisiera información.`);
   return `https://wa.me/${phone.replace(/\D/g, "")}?text=${text}`;
@@ -591,7 +662,7 @@ export function SiteView({
   preview?: boolean; // dentro de la app: sin botones flotantes
 }) {
   const tpl = templateById(template ?? site.template);
-  const kit = site.brand ? sanitizeKit(site.brand, site.brand) : null;
+  const kit = site.brand ? withBusinessName(sanitizeKit(site.brand, site.brand), site.name) : null;
   const palette = kit ? kitPalette(kit) : palettesFor(site.industry)[0];
   const fonts = fontsById(kit?.fonts ?? "jakarta");
   const wa = site.phone ? whatsappLink(site.phone, site.name) : null;
@@ -610,6 +681,8 @@ export function SiteView({
       .slice(0, 2)
       .toUpperCase(),
     photo: site.photos[0] ?? null,
+    headline: kit?.slogan || site.tagline,
+    intro: kit?.slogan ? `${site.tagline}. ${site.intro}` : site.intro,
     h1: `font-semibold leading-[0.98] tracking-[-0.035em] [font-family:var(--heading)] ${tpl.big ? "text-5xl sm:text-7xl lg:text-8xl" : "text-4xl sm:text-5xl lg:text-6xl"}`,
     h2: `font-semibold leading-tight tracking-[-0.025em] [font-family:var(--heading)] ${tpl.big ? "text-3xl sm:text-5xl" : "text-3xl sm:text-4xl"}`,
   };
@@ -640,6 +713,7 @@ export function SiteView({
 
       <main>
         <Hero c={c} />
+        <Highlights c={c} />
         <Services c={c} />
         <About c={c} />
         <Gallery c={c} />

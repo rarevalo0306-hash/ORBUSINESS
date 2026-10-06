@@ -46,7 +46,6 @@ const INCLUDES = [
   "Papelería para imprenta: tarjeta de presentación, hoja membretada (PDF y Word), cotización y volante",
   "Cómo se ve tu marca: letrero del local, camiseta, bolsa, vehículo y chat de WhatsApp",
   "Paleta de colores para Adobe, fondos de marca y manual de marca completo",
-  "Tu página web con tus colores, tus letras y tu logo",
 ];
 
 const GROUPS: Group[] = ["Presentación", "Logo", "Redes sociales", "Papelería", "Mockups", "Colores y patrón"];
@@ -107,7 +106,7 @@ export default async function BrandPage(props: PageProps<"/onboarding/marca">) {
         </h2>
         {query.comprado && purchased && (
           <p role="status" className="rounded-2xl border border-lime/40 bg-lime/10 p-4 text-lime">
-            ¡Listo! Tu kit de marca es tuyo. Ya puedes descargarlo todo y ya quedó aplicado a tu página web.
+            ¡Listo! Tu kit de marca es tuyo. Ya puedes descargarlo todo.
           </p>
         )}
 

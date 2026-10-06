@@ -151,7 +151,7 @@ export async function writeBase(b: Business, services: { name: string }[], kit: 
     system:
       "Eres Nuna, estratega de marca de Orbusiness. Escribe la base de marca completa de un negocio pequeño, a partir de la identidad que el dueño eligió. " +
       "Español natural del país, sencillo, cálido y concreto (nada de palabras rebuscadas de agencia). " +
-      `Los textos para clientes (bio, descripción, bienvenida de WhatsApp, mensajes) usan el trato de ${formOf(b)}. ` +
+      `Todos los textos usan el trato de ${formOf(b)} (también los valores y la historia; no menciones otro trato). ` +
       "No inventes datos que no conoces (años de fundación, premios, cantidades, nombres de empleados); la historia puede hablar del propósito y del barrio sin fechas. " +
       "voiceDo son frases de ejemplo que sí diría el negocio; voiceDont son cosas que nunca diría o haría al hablar con clientes. " +
       "bio: máximo 150 caracteres. hashtags: 5 a 8, sin espacios. postIdeas: 5 ideas concretas de publicaciones para redes. " +
@@ -159,7 +159,7 @@ export async function writeBase(b: Business, services: { name: string }[], kit: 
     user: [
       businessBrief(b, services),
       "",
-      `Identidad elegida: "${kit.name}". Idea: ${kit.concept}`,
+      `Identidad elegida: "${kit.name}" (es solo el nombre de la propuesta: en los textos usa siempre el nombre del negocio, "${b.name}"). Idea: ${kit.concept}`,
       `Propuesta de valor: ${kit.proposition}. Personalidad: ${kit.personality.join(", ")}. Tono: ${kit.tone}. Eslogan: ${kit.slogan}.`,
     ].join("\n"),
     schema: BaseSchema,

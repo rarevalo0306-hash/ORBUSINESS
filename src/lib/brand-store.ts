@@ -24,7 +24,7 @@ export const kitLogoUrl = (b: Business) => {
   return typeof path === "string" && path.startsWith(`${b.id}/`) ? publicAssetUrl(path) : null;
 };
 
-// Guarda el kit elegido. Si ya está comprado, regenera el logo PNG público y actualiza la página publicada.
+// Guarda el kit elegido y actualiza la página publicada. Si ya está comprado, regenera el logo PNG público.
 export async function saveKit(supabase: Supabase, b: Business, kit: BrandKit, patch: { brand_status?: string } = {}) {
   const purchased = (patch.brand_status ?? b.brand_status) === "purchased";
   const oldPath = (b.brand_kit as { logoPng?: unknown } | null)?.logoPng;
@@ -47,11 +47,11 @@ export async function saveKit(supabase: Supabase, b: Business, kit: BrandKit, pa
   if (logoPath && typeof oldPath === "string" && oldPath.startsWith(`${b.id}/`)) {
     await supabase.storage.from("brand-assets").remove([oldPath]);
   }
-  if (purchased) await refreshPublishedSite(supabase, updated);
+  await refreshPublishedSite(supabase, updated);
   return updated;
 }
 
-// Contenido de la página web con lo que hay hoy (servicios, fotos, logo y, si se compró, la marca).
+// Contenido de la página web con lo que hay hoy (servicios, fotos, logo y la marca elegida).
 export async function siteContentFor(supabase: Supabase, b: Business) {
   const [{ data: services }, { data: assets }, { data: website }] = await Promise.all([
     supabase.from("services").select("*").eq("business_id", b.id).order("sort"),
@@ -60,7 +60,8 @@ export async function siteContentFor(supabase: Supabase, b: Business) {
   ]);
   const logo = assets?.find((a) => a.kind === "logo");
   const photos = (assets ?? []).filter((a) => a.kind === "photo").map((a) => publicAssetUrl(a.storage_path));
-  const brand = b.brand_status === "purchased" ? storedKit(b.brand_kit, b) : null;
+  // La página usa la marca elegida (colores, letras y logo); lo que se compra son los archivos y el manual.
+  const brand = ["chosen", "purchased"].includes(b.brand_status) ? storedKit(b.brand_kit, b) : null;
   return buildSiteContent(b, services ?? [], logo ? publicAssetUrl(logo.storage_path) : null, photos, brand, website?.template ?? "clasica");
 }
 

@@ -56,3 +56,27 @@ export async function chooseTemplate(template: string) {
   await refreshPublishedSite(supabase, business);
   revalidatePath("/onboarding/web");
 }
+
+// Productos o servicios que salen en la página (la entrevista guarda los primeros; aquí se completan).
+export async function addService(formData: FormData) {
+  const { supabase, business } = await requireBusiness();
+  const name = String(formData.get("name") ?? "").trim().replace(/\s+/g, " ").slice(0, 80);
+  const rawPrice = String(formData.get("price") ?? "").replace(/[^\d.,]/g, "").replace(/,/g, "");
+  const price = rawPrice && Number.isFinite(Number(rawPrice)) && Number(rawPrice) > 0 ? Math.round(Number(rawPrice) * 100) / 100 : null;
+  if (!name) return;
+  const { data: current } = await supabase.from("services").select("sort").eq("business_id", business.id);
+  if ((current?.length ?? 0) >= 40) return;
+  const sort = Math.max(-1, ...(current ?? []).map((s) => s.sort ?? 0)) + 1;
+  const { error } = await supabase.from("services").insert({ business_id: business.id, name, price, sort });
+  if (error) throw new Error(error.message);
+  await refreshPublishedSite(supabase, business);
+  revalidatePath("/onboarding/web");
+}
+
+export async function removeService(id: string) {
+  const { supabase, business } = await requireBusiness();
+  const { error } = await supabase.from("services").delete().eq("id", id).eq("business_id", business.id);
+  if (error) throw new Error(error.message);
+  await refreshPublishedSite(supabase, business);
+  revalidatePath("/onboarding/web");
+}

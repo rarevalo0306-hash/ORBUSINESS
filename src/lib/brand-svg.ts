@@ -108,3 +108,26 @@ export function sanitizeSvgFragment(input: string, prefix = ""): string {
 export function recolorFragment(svg: string, color: string) {
   return `<g fill="${color}">${svg.replace(/\b(fill|stroke|stop-color)="(?!none")[^"]*"/g, `$1="${color}"`)}</g>`;
 }
+
+function luminance(color: string) {
+  const c = color.trim().toLowerCase();
+  let rgb: number[] | null = null;
+  if (/^#[0-9a-f]{3}$/.test(c)) rgb = [1, 2, 3].map((i) => parseInt(c[i] + c[i], 16));
+  else if (/^#[0-9a-f]{6}/.test(c)) rgb = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  else {
+    const m = c.match(/rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/);
+    if (m) rgb = [m[1], m[2], m[3]].map(Number);
+  }
+  if (!rgb) return c === "white" ? 1 : c === "black" ? 0 : null;
+  return (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
+}
+
+// Versión para fondo oscuro: las partes oscuras se vuelven blancas y los colores vivos se quedan,
+// así el símbolo conserva su dibujo (por ejemplo, la casita naranja dentro de la tuerca).
+export function onDarkFragment(svg: string) {
+  return svg.replace(/\b(fill|stroke|stop-color)="([^"]*)"/g, (all, attr: string, value: string) => {
+    if (value === "none" || value.startsWith("url(")) return all;
+    const l = luminance(value);
+    return l !== null && l < 0.22 ? `${attr}="#FFFFFF"` : all;
+  });
+}

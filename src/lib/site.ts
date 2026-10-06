@@ -33,9 +33,11 @@ export type SiteContent = {
   paymentMethods?: string[];
   logoUrl: string | null;
   photos: string[];
+  kind?: string | null; // products | services | both
+  highlights?: { icon: "entrega" | "credito" | "horario" | "chat" | "visita" | "fijo"; title: string; text: string }[];
   ctaLabel: string; // se mantiene por las páginas publicadas antes
   copy?: SiteCopy;
-  brand?: BrandKit | null; // kit de marca comprado: colores, letras y logo de la página
+  brand?: BrandKit | null; // kit de marca elegido: colores, letras y logo de la página
   template?: string; // plantilla de diseño (lib/site-templates.ts)
 };
 
@@ -115,6 +117,38 @@ export function buildSiteContent(
     .filter(Boolean)
     .join(" ");
 
+  const credit = (b.payment_methods ?? []).find((m) => /fiado|cr[eé]dito/i.test(m));
+  const highlights: NonNullable<SiteContent["highlights"]> = [
+    b.offers_delivery && {
+      icon: "entrega" as const,
+      title: "Entrega a domicilio",
+      text: t({ tu: "Te llevamos tu pedido hasta la puerta.", usted: "Le llevamos su pedido hasta la puerta.", vos: "Te llevamos tu pedido hasta la puerta." }),
+    },
+    b.visit_before_quote && {
+      icon: "visita" as const,
+      title: "Visita sin costo",
+      text: t({ tu: "Vemos tu trabajo y te damos un precio claro.", usted: "Vemos su trabajo y le damos un precio claro.", vos: "Vemos tu trabajo y te damos un precio claro." }),
+    },
+    credit && {
+      icon: "credito" as const,
+      title: "Crédito de confianza",
+      text: t({ tu: "Clientes de siempre pueden llevar fiado.", usted: "Clientes de siempre pueden llevar fiado.", vos: "Clientes de siempre pueden llevar fiado." }),
+    },
+    b.has_recurring_clients && b.business_type !== "products" && {
+      icon: "fijo" as const,
+      title: "Servicio fijo",
+      text: "Cada semana o cada mes, sin tener que acordarse.",
+    },
+    b.hours && { icon: "horario" as const, title: "Horario", text: b.hours },
+    {
+      icon: "chat" as const,
+      title: "Respuesta rápida",
+      text: t({ tu: "Escríbenos y te contestamos en minutos.", usted: "Escríbanos y le contestamos en minutos.", vos: "Escribinos y te contestamos en minutos." }),
+    },
+  ]
+    .filter((x): x is NonNullable<SiteContent["highlights"]>[number] => Boolean(x))
+    .slice(0, 4);
+
   return {
     name: b.name,
     tagline,
@@ -133,6 +167,8 @@ export function buildSiteContent(
     paymentMethods: b.payment_methods,
     logoUrl,
     photos,
+    kind: b.business_type,
+    highlights,
     ctaLabel: cta,
     brand,
     template,

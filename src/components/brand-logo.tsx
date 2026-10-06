@@ -22,6 +22,7 @@ import {
   type BrandKit,
 } from "@/lib/brand";
 import { modernMark } from "@/lib/brand-marks";
+import { onDarkFragment } from "@/lib/brand-svg";
 
 // Logo de un kit de marca para mostrar en pantalla, en sus 4 estilos (clásico, apilado, emblema y
 // solo nombre). La tipografía se carga con googleFontsHref(); las descargas usan lib/brand-render.ts
@@ -29,6 +30,8 @@ import { modernMark } from "@/lib/brand-marks";
 
 type Variant = "principal" | "vertical" | "isotipo" | "sello";
 type Theme = "color" | "blanco" | "mono";
+// "oscuro": como "blanco", pero el símbolo dibujado por IA conserva sus colores vivos.
+type ThemeIn = Theme | "oscuro";
 
 function inks(kit: BrandKit, theme: Theme) {
   const p = kitPalette(kit);
@@ -90,7 +93,7 @@ export function BrandLogo({
   name,
   variant = "principal",
   size = 48,
-  theme = "color",
+  theme: themeIn = "color",
   compact = false,
   className = "",
 }: {
@@ -98,14 +101,18 @@ export function BrandLogo({
   name: string;
   variant?: Variant;
   size?: number; // alto del símbolo en px
-  theme?: Theme;
+  theme?: ThemeIn;
   compact?: boolean; // en espacios chicos (encabezado de la página), el emblema se muestra como clásico
   className?: string;
 }) {
+  const theme: Theme = themeIn === "oscuro" ? "blanco" : themeIn;
   const p = kitPalette(kit);
   const f = fontsById(kit.fonts);
   const ink = inks(kit, theme);
-  const iso = isotypeSvg(kit, { size, mono: ink.mono, initials: name });
+  const iso =
+    themeIn === "oscuro" && kit.mark === "ia" && kit.aiMark
+      ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${size}" height="${size}">${onDarkFragment(aiMarkInner(kit, "color"))}</svg>`
+      : isotypeSvg(kit, { size, mono: ink.mono, initials: name });
   const text = logoName(kit, name);
   const upper = kit.nameStyle === "mayusculas";
   const nameStyle: CSSProperties = {
