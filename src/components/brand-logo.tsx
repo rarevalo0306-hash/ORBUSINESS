@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import {
+  aiMarkInner,
   escapeXml,
   fontsById,
   initials,
@@ -51,7 +52,9 @@ function emblemSvg(kit: BrandKit, name: string, theme: Theme) {
     ? `<circle cx="120" cy="120" r="120" fill="${bg}"/>`
     : `<circle cx="120" cy="120" r="117" fill="none" stroke="#FFFFFF" stroke-width="6"/>`;
   const scale = kit.monogram ? 0.62 : 0.78;
-  const mark = isModernMark(kit.mark)
+  const mark = kit.mark === "ia" && kit.aiMark
+    ? `<g transform="translate(80 80) scale(0.8)">${aiMarkInner(kit, ink)}</g>`
+    : isModernMark(kit.mark)
     ? `<g transform="translate(80 80) scale(0.8)">${modernMark(kit.mark, { a: ink, b: mixHex(ink, bg, 0.4), c: mixHex(ink, bg, 0.2), on: filled ? bg : p.primary }, { icon: kit.icon, letter: { char: markChar(name), family: f.heading.family, weight: f.heading.weight }, letter2: { char: markChar2(name), family: f.heading.family, weight: f.heading.weight } })}</g>`
     : `<g transform="translate(72 72)">${markSvg(kit, 96, ink, { initials: initials(name), scale })}</g>`;
   return (

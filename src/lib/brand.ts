@@ -5,6 +5,7 @@
 
 import { BRAND_ICONS } from "@/lib/brand-icons";
 import { MARKS, marksFor, modernMark, type MarkColors, type MarkId } from "@/lib/brand-marks";
+import { recolorFragment, sanitizeSvgFragment } from "@/lib/brand-svg";
 import { norm } from "@/lib/interview";
 import { say, type AddressForm } from "@/lib/markets";
 
@@ -67,7 +68,10 @@ export type BrandKit = {
   palette: string; // id de paleta curada, o "custom" si usa colors
   colors?: Colors | null; // paleta inventada para este negocio (ya corregida para que se lea bien)
   fonts: string; // id de tipografías
-  mark: MarkId; // símbolo moderno ("clasico" = forma + ícono, kits viejos)
+  mark: MarkId; // símbolo moderno ("ia" = el que dibujó la IA; "clasico" = forma + ícono, kits viejos)
+  aiMark?: string | null; // símbolo dibujado por la IA (SVG limpio, cuadro de 100 × 100)
+  aiChoices?: string[]; // otras opciones de símbolo dibujadas por la IA
+  symbolIdea?: string; // el encargo que Nuna le dio a la IA para dibujar el símbolo
   icon: string; // id de ícono (BRAND_ICONS), para los símbolos con ícono
   shape: Shape; // solo para el símbolo "clasico"
   monogram: boolean; // solo para el símbolo "clasico"
@@ -473,6 +477,14 @@ export function markColors(kit: BrandKit, theme: "color" | "blanco" | "mono" = "
   return { a: p.primary, b: p.accent, c: lens, on: onColor(p.primary, p.dark) };
 }
 
+// Símbolo de la IA en el cuadro de 100: a color, en blanco o a un color (o del color que se pida).
+export function aiMarkInner(kit: Pick<BrandKit, "aiMark" | "palette" | "colors">, theme: "color" | "blanco" | "mono" | string) {
+  const svg = sanitizeSvgFragment(kit.aiMark ?? "");
+  if (theme === "color") return svg;
+  const color = theme === "blanco" ? "#FFFFFF" : theme === "mono" ? kitPalette(kit).dark : theme;
+  return recolorFragment(svg, color);
+}
+
 // Letra principal del símbolo (la inicial del nombre).
 export const markChar = (name: string) => initials(name).charAt(0) || "A";
 // Segunda inicial (monograma). Si el nombre tiene una sola palabra, la segunda letra del nombre.
@@ -483,6 +495,10 @@ export function isotypeSvg(
   opts: { size?: number; mono?: string; monogramPath?: string; initials?: string; letterPath?: string; letterPath2?: string; theme?: "color" | "blanco" | "mono" } = {},
 ) {
   const size = opts.size ?? 100;
+  if (kit.mark === "ia" && kit.aiMark) {
+    const theme = opts.theme ?? (opts.mono === "#FFFFFF" ? "blanco" : opts.mono ? "mono" : "color");
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${size}" height="${size}">${aiMarkInner(kit, theme)}</svg>`;
+  }
   if (isModernMark(kit.mark)) {
     const theme = opts.theme ?? (opts.mono === "#FFFFFF" ? "blanco" : opts.mono ? "mono" : "color");
     const f = fontsById(kit.fonts).heading;
@@ -764,6 +780,7 @@ export function sanitizeKit(k: Partial<BrandKit>, fallback: BrandKit): BrandKit 
   const fonts = FONT_PAIRS.some((f) => f.id === k.fonts) ? k.fonts! : fallback.fonts;
   const nameStyle = oneOf(k.nameStyle, ["normal", "minusculas", "mayusculas", "dos-tonos", "dos-pesos", "letra-acento", "letra-simbolo"] as const, fallback.nameStyle ?? "normal");
   const marks = MARKS.map((m) => m.id);
+  const aiMark = typeof k.aiMark === "string" && k.aiMark ? sanitizeSvgFragment(k.aiMark) || null : null;
   const curated = PALETTES.some((p) => p.id === k.palette) ? k.palette! : PALETTES.some((p) => p.id === fallback.palette) ? fallback.palette : PALETTES[0].id;
   return {
     name: str(k.name, 60, fallback.name),
@@ -776,7 +793,10 @@ export function sanitizeKit(k: Partial<BrandKit>, fallback: BrandKit): BrandKit 
     palette: colors ? "custom" : curated,
     colors,
     fonts,
-    mark: oneOf(k.mark, marks, isModernMark(fallback.mark ?? "clasico") ? fallback.mark : "letra-squircle"),
+    mark: k.mark === "ia" && aiMark ? "ia" : oneOf(k.mark, marks, isModernMark(fallback.mark ?? "clasico") && fallback.mark !== "ia" ? fallback.mark : "letra-squircle"),
+    aiMark,
+    aiChoices: Array.isArray(k.aiChoices) ? k.aiChoices.map((x) => sanitizeSvgFragment(String(x))).filter(Boolean).slice(0, 8) : [],
+    symbolIdea: typeof k.symbolIdea === "string" ? k.symbolIdea.slice(0, 300) : undefined,
     icon: k.icon && BRAND_ICONS[k.icon] ? k.icon : fallback.icon,
     shape: oneOf(k.shape, ["circle", "rounded", "hexagon", "shield", "diamond", "ring", "none"] as const, fallback.shape),
     monogram: typeof k.monogram === "boolean" ? k.monogram : fallback.monogram,

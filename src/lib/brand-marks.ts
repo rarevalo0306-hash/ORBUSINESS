@@ -44,9 +44,10 @@ export type MarkId =
   | "monograma"
   | "icono-duo"
   | "icono-squircle"
+  | "ia" // símbolo único dibujado por la IA (Recraft), guardado en BrandKit.aiMark
   | "clasico"; // estilo anterior (forma + ícono), se conserva para kits viejos
 
-export type MarkInfo = { id: Exclude<MarkId, "clasico">; label: string; kind: "concepto" | "forma" | "letra" | "icono"; tags?: string[] };
+export type MarkInfo = { id: Exclude<MarkId, "clasico" | "ia">; label: string; kind: "concepto" | "forma" | "letra" | "icono"; tags?: string[] };
 
 export const MARKS: MarkInfo[] = [
   { id: "tuerca", label: "Tuerca", kind: "concepto", tags: ["ferreter", "taller", "mecan", "construc", "industri", "soldad"] },

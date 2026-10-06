@@ -23,7 +23,7 @@ import {
   type NameStyle,
   type Palette,
 } from "@/lib/brand";
-import { customizeKit } from "./actions";
+import { customizeKit, drawMoreSymbols } from "./actions";
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -42,10 +42,12 @@ export function KitEditor({
   customColors,
   icons,
   industry,
+  aiEnabled = false,
 }: {
   kit: BrandKit;
   name: string;
   industry: string | null;
+  aiEnabled?: boolean; // hay IA de dibujo conectada (Recraft)
   palettes: Palette[];
   customColors: { label: string; colors: Colors }[]; // paletas que Nuna inventó en las propuestas
   icons: string[];
@@ -55,6 +57,8 @@ export function KitEditor({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [drawing, startDrawing] = useTransition();
+  const [drawError, setDrawError] = useState<string | null>(null);
   const changed = JSON.stringify(draft) !== JSON.stringify(kit);
   const p = kitPalette(draft);
   const f = fontsById(draft.fonts);
@@ -79,6 +83,17 @@ export function KitEditor({
     setSaved(false);
     setDraft((d) => ({ ...d, ...changes }));
   };
+
+  function drawMore() {
+    setDrawError(null);
+    startDrawing(async () => {
+      try {
+        await drawMoreSymbols();
+      } catch {
+        setDrawError("No se pudieron dibujar símbolos ahora. Intenta más tarde.");
+      }
+    });
+  }
 
   function save() {
     setError(null);
@@ -195,6 +210,41 @@ export function KitEditor({
             ))}
           </div>
         </Group>
+
+        {(aiEnabled || (draft.aiChoices?.length ?? 0) > 0) && (
+          <Group title="Símbolos únicos dibujados para tu negocio">
+            <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+              {(draft.aiChoices ?? []).map((svg, i) => {
+                const active = draft.mark === "ia" && draft.aiMark === svg;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-pressed={active}
+                    aria-label={`Símbolo dibujado ${i + 1}`}
+                    onClick={() => set({ mark: "ia", aiMark: svg })}
+                    className={`${tileBtn(active)} bg-white`}
+                  >
+                    <BrandLogo kit={{ ...draft, mark: "ia", aiMark: svg }} name={name} variant="isotipo" size={52} />
+                  </button>
+                );
+              })}
+            </div>
+            {aiEnabled && (
+              <div className="flex flex-wrap items-center gap-3">
+                <Button type="button" variant="ghost" onClick={drawMore} disabled={drawing}>
+                  {drawing ? "Dibujando… (unos 30 segundos)" : "Dibujar 4 símbolos nuevos"}
+                </Button>
+                <span className="text-xs text-muted">Cada símbolo es único, en vector, y se dibuja con los colores de tu marca.</span>
+                {drawError && (
+                  <span role="alert" className="text-sm text-red-300">
+                    {drawError}
+                  </span>
+                )}
+              </div>
+            )}
+          </Group>
+        )}
 
         <Group title="Símbolo">
           <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">

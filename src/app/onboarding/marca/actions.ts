@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { sanitizeKit, storedKit, storedOptions, type BrandKit } from "@/lib/brand";
+import { kitPalette, marksFor, sanitizeKit, storedKit, storedOptions, type BrandKit } from "@/lib/brand";
 import { proposeKits, writeBase } from "@/lib/brand-ai";
+import { drawSymbols, recraftEnabled } from "@/lib/brand-recraft";
 import { brandKitPrice, saveKit } from "@/lib/brand-store";
 import { requireBusiness } from "@/lib/business";
 import type { Json } from "@/lib/database.types";
@@ -75,11 +76,51 @@ export async function saveBrand(formData: FormData) {
 
 // ---------- Kit de marca ----------
 
-// Nuna propone 3 identidades de marca (gratis, para que el dueño las vea).
+// ---------- Símbolos dibujados por la IA (Recraft) ----------
+
+const DAILY_DRAWINGS = 24; // tope de pedidos al día por negocio (cuida el costo)
+
+type Supabase = Awaited<ReturnType<typeof requireBusiness>>["supabase"];
+
+async function drawingsLeft(supabase: Supabase, businessId: string) {
+  const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+  const { count } = await supabase
+    .from("audit_log")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", businessId)
+    .eq("action", "brand.ai_symbols")
+    .gte("created_at", since);
+  return DAILY_DRAWINGS - (count ?? 0);
+}
+
+const ideaFor = (kit: BrandKit, industry: string | null) =>
+  kit.symbolIdea?.trim() || `a simple iconic symbol for a ${industry || "local business"}, inspired by a ${marksFor(industry)[0]?.label ?? "geometric shape"}`;
+
+async function draw(supabase: Supabase, userId: string, b: { id: string; industry: string | null }, kit: BrandKit, n: number) {
+  if (!recraftEnabled() || (await drawingsLeft(supabase, b.id)) <= 0) return [];
+  const p = kitPalette(kit);
+  const symbols = await drawSymbols({ idea: ideaFor(kit, b.industry), industry: b.industry, colors: [p.primary, p.accent, p.dark], n });
+  await supabase.from("audit_log").insert({
+    business_id: b.id,
+    actor: "nuna",
+    actor_user_id: userId,
+    action: "brand.ai_symbols",
+    data: { requested: n, received: symbols.length, model: process.env.RECRAFT_MODEL || "recraftv4_1_vector" },
+  });
+  return symbols;
+}
+
+// Nuna propone 3 identidades de marca (gratis, para que el dueño las vea). Si está conectada la IA
+// de dibujo, cada propuesta trae un símbolo único dibujado para este negocio.
 export async function generateKits() {
   const { supabase, user, business } = await requireBusiness();
   const { data: services } = await supabase.from("services").select("name").eq("business_id", business.id).order("sort");
-  const kits = await proposeKits(business, services ?? []);
+  const kits = await Promise.all(
+    (await proposeKits(business, services ?? [])).map(async (kit) => {
+      const [symbol] = await draw(supabase, user.id, business, kit, 1);
+      return symbol ? { ...kit, mark: "ia" as const, aiMark: symbol, aiChoices: [symbol] } : kit;
+    }),
+  );
   const { error } = await supabase
     .from("businesses")
     .update({ brand_options: kits as unknown as Json })
@@ -111,6 +152,17 @@ export async function chooseKit(index: number) {
     action: "brand.kit_chosen",
     data: { name: kit.name },
   });
+  revalidatePath("/onboarding/marca");
+}
+
+// Dibujar más opciones de símbolo para la marca elegida.
+export async function drawMoreSymbols() {
+  const { supabase, user, business } = await requireBusiness();
+  const current = storedKit(business.brand_kit, business);
+  if (!current) throw new Error("Primero elige una propuesta");
+  const symbols = await draw(supabase, user.id, business, current, 4);
+  if (!symbols.length) throw new Error("No se pudieron dibujar símbolos ahora. Intenta más tarde.");
+  await saveKit(supabase, business, { ...current, aiChoices: [...symbols, ...(current.aiChoices ?? [])].slice(0, 8) });
   revalidatePath("/onboarding/marca");
 }
 

@@ -47,6 +47,7 @@ const KitSchema = z.object({
   fonts: z.string(),
   icon: z.string(),
   mark: z.string(),
+  symbolIdea: z.string(),
   layout: z.string(),
   nameStyle: z.string(),
   pattern: z.string(),
@@ -81,6 +82,10 @@ export async function proposeKits(b: Business, services: { name: string }[]): Pr
       "si el nombre es largo, más de 18 letras, usa estilo 'apilado' o 'centrado'); " +
       "y LA MARCA NACE DE CONOCER EL NEGOCIO (como Walter Landor). " +
       "En 'concept' explica la idea del logo y POR QUÉ representa a este negocio, usando lo que contó el dueño en la entrevista (giro, zona, lo que vende, cómo atiende, sus clientes). " +
+      "symbolIdea: el encargo para un ilustrador profesional que dibujará un SÍMBOLO ÚNICO para esta propuesta. Escríbelo EN INGLÉS, máximo 30 palabras, " +
+      "una sola idea visual concreta y simple, con ingenio (doble lectura o espacio negativo) y relacionada con el negocio, su oficio o su barrio; sin texto ni letras. " +
+      "Ejemplo: 'a hexagonal hardware nut whose inner hole forms a small house, symbolizing the neighborhood hardware store'. " +
+      "Los 3 encargos deben ser ideas distintas. " +
       "TIPOS DE LOGO: las 3 propuestas deben ser de tipos distintos: IMAGOTIPO (símbolo y nombre separables: layout clasico, centrado o apilado), " +
       "LOGOTIPO (solo el nombre con estilo: layout palabra o firma; con nameStyle 'letra-simbolo' una 'o' del nombre se convierte en el símbolo, úsalo si el nombre tiene 'o'), " +
       "MONOGRAMA (siglas en grande, ideal si el nombre es largo: layout siglas) e ISOLOGOTIPO (nombre y símbolo integrados en una insignia: layout insignia). " +
@@ -106,7 +111,7 @@ export async function proposeKits(b: Business, services: { name: string }[]): Pr
       'Formato: {"kits": [{"name": "nombre corto y creativo de la propuesta", "concept": "la idea del logo y por qué representa a este negocio, con datos de la entrevista (2-3 oraciones)", ' +
       '"proposition": "propuesta de valor (1 oración)", "personality": ["3 adjetivos"], "tone": "tono de voz (1 oración)", "slogan": "eslogan", ' +
       '"caption": "Giro · Zona", "colors": {"primary": "#1F3A5F", "secondary": "#F2A900", "accent": "#E4572E", "dark": "#14202E", "light": "#F5F3EE"}, ' +
-      '"fonts": "id", "mark": "id", "icon": "id", "layout": "id", "nameStyle": "id", "pattern": "id"}, ...]} con exactamente 3 kits.',
+      '"fonts": "id", "mark": "id", "symbolIdea": "idea del símbolo en inglés", "icon": "id", "layout": "id", "nameStyle": "id", "pattern": "id"}, ...]} con exactamente 3 kits.',
     maxTokens: 3000,
     temperature: 1.1,
   });

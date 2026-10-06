@@ -1,6 +1,7 @@
 import "server-only";
 import { parse, type Font } from "opentype.js";
 import {
+  aiMarkInner,
   fontsById,
   isModernMark,
   markChar,
@@ -367,7 +368,9 @@ function emblem(kit: BrandKit, name: string, fonts: KitFonts, theme: LogoTheme):
   const markSize = 96;
   const scale = kit.monogram ? 0.62 : 0.78;
   const mPath = kit.monogram ? monogramPath(fonts.heading, name, markSize, scale) : undefined;
-  const mark = isModernMark(kit.mark)
+  const mark = kit.mark === "ia" && kit.aiMark
+    ? `<g transform="translate(${c - 40} ${c - 40}) scale(0.8)">${aiMarkInner(kit, ink)}</g>`
+    : isModernMark(kit.mark)
     ? `<g transform="translate(${c - 40} ${c - 40}) scale(0.8)">${modernMark(kit.mark, { a: ink, b: mixHex(ink, bg, 0.4), c: mixHex(ink, bg, 0.2), on: filled ? bg : p.primary }, { icon: kit.icon, letter: { path: markLetterPath(kit, name, fonts), char: markChar(name), family: "", weight: 400 }, letter2: { path: markLetterPath(kit, name, fonts, 1), char: markChar2(name), family: "", weight: 400 } })}</g>`
     : `<g transform="translate(${c - markSize / 2} ${c - markSize / 2})">${markSvg(kit, markSize, ink, { monogramPath: mPath, scale })}</g>`;
   return {

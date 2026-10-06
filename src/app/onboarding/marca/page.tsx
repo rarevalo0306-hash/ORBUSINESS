@@ -12,6 +12,7 @@ import {
   storedOptions,
 } from "@/lib/brand";
 import { FORMAT_LABEL, ITEMS, ZIP_NAME, type Group } from "@/lib/brand-files";
+import { recraftEnabled } from "@/lib/brand-recraft";
 import { brandKitPrice } from "@/lib/brand-store";
 import { publicAssetUrl, requireBusiness } from "@/lib/business";
 import { generateKits, purchaseKit, rewriteBase, saveBrand } from "./actions";
@@ -151,13 +152,14 @@ export default async function BrandPage(props: PageProps<"/onboarding/marca">) {
           <div className="flex flex-col gap-4 rounded-2xl border border-line bg-panel p-5">
             <h3 className="font-display text-xl font-bold">Ajusta tu marca</h3>
             <KitEditor
-              key={kit.name}
+              key={`${kit.name}-${kit.aiChoices?.length ?? 0}`}
               kit={kit}
               name={business.name}
               palettes={palettesFor(business.industry)}
               customColors={customColors}
               icons={iconsFor(business.industry)}
               industry={business.industry}
+              aiEnabled={recraftEnabled()}
             />
           </div>
         )}
