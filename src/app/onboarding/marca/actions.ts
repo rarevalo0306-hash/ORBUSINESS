@@ -79,6 +79,7 @@ export async function saveBrand(formData: FormData) {
 // ---------- Símbolos dibujados por la IA (Recraft) ----------
 
 const DAILY_DRAWINGS = 24; // tope de pedidos al día por negocio (cuida el costo)
+const SYMBOLS_PER_PROPOSAL = 2;
 
 type Supabase = Awaited<ReturnType<typeof requireBusiness>>["supabase"];
 
@@ -122,8 +123,9 @@ export async function generateKits() {
   // Los símbolos se piden uno tras otro (Recraft limita los pedidos simultáneos).
   const kits: BrandKit[] = [];
   for (const kit of await proposeKits(business, services ?? [])) {
-    const [symbol] = await draw(supabase, user.id, business, kit, 1);
-    kits.push(symbol ? { ...kit, mark: "ia" as const, aiMark: symbol, aiChoices: [symbol] } : kit);
+    // 2 símbolos por propuesta (en un solo pedido): el primero va en la propuesta, el otro queda como opción.
+    const symbols = await draw(supabase, user.id, business, kit, SYMBOLS_PER_PROPOSAL);
+    kits.push(symbols.length ? { ...kit, mark: "ia" as const, aiMark: symbols[0], aiChoices: symbols } : kit);
   }
   const { error } = await supabase
     .from("businesses")
