@@ -315,6 +315,20 @@ async function openaiJsonText(opts: { system: string; user: string; model?: stri
   );
 }
 
+// Las IA a veces mandan null en lo que no aplica (por ejemplo, el ícono cuando el símbolo no lleva
+// ícono). Si la respuesta no pasa tal cual, se intenta sin esos null antes de descartarla.
+function withoutNulls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutNulls);
+  if (value && typeof value === "object")
+    return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== null).map(([k, v]) => [k, withoutNulls(v)]));
+  return value;
+}
+
+function parseLenient<T>(schema: z.ZodType<T>, raw: unknown) {
+  const first = schema.safeParse(raw);
+  return first.success ? first : schema.safeParse(withoutNulls(raw));
+}
+
 // ---------- Respuesta estructurada genérica (para el kit de marca y otras tareas) ----------
 
 export async function aiJson<T>(opts: {
@@ -345,7 +359,7 @@ export async function aiJson<T>(opts: {
           console.error("Nuna (openai): respuesta JSON incompleta, se pide de nuevo.");
           continue;
         }
-        const parsed = opts.schema.safeParse(raw);
+        const parsed = parseLenient(opts.schema, raw);
         if (parsed.success) return parsed.data;
         console.error("Nuna (openai): la respuesta no tiene el formato esperado:", parsed.error.issues.slice(0, 3));
       }
@@ -390,7 +404,7 @@ export async function aiJson<T>(opts: {
         console.error("Nuna (deepseek): respuesta JSON incompleta, se pide de nuevo.");
         continue;
       }
-      const parsed = opts.schema.safeParse(raw);
+      const parsed = parseLenient(opts.schema, raw);
       if (parsed.success) return parsed.data;
       console.error("Nuna (deepseek): la respuesta no tiene el formato esperado:", parsed.error.issues.slice(0, 3));
     }
