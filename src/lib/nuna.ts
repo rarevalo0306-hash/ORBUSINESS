@@ -271,7 +271,7 @@ async function askClaude(key: QuestionKey, answer: string, b: B): Promise<Answer
 // ---------- OpenAI (API "responses") ----------
 
 const OPENAI_BASE_URL = () => process.env.OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1";
-export const openaiModel = () => process.env.OPENAI_MODEL?.trim() || "gpt-6.1-sol";
+export const openaiModel = () => process.env.OPENAI_MODEL?.trim() || "gpt-6-astra";
 
 async function openaiJsonText(opts: { system: string; user: string; model?: string; maxTokens: number }) {
   const body: Record<string, unknown> = {

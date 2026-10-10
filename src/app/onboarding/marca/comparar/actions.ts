@@ -11,7 +11,6 @@ import type { Provider } from "@/lib/nuna";
 
 const BRAINS: { id: string; label: string; provider: Provider; model?: string; needs: string }[] = [
   { id: "deepseek", label: "DeepSeek", provider: "deepseek", needs: "DEEPSEEK_API_KEY" },
-  { id: "sol", label: "OpenAI GPT-6.1 Sol", provider: "openai", model: "gpt-6.1-sol", needs: "OPENAI_API_KEY" },
   { id: "astra", label: "OpenAI GPT-6 Astra (el más potente)", provider: "openai", model: "gpt-6-astra", needs: "OPENAI_API_KEY" },
 ];
 const DAILY_TESTS = 3;
