@@ -21,15 +21,6 @@ function MicIcon({ className = "size-5" }: { className?: string }) {
   );
 }
 
-function SpeakerIcon({ className = "size-5", on }: { className?: string; on: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
-      <path d="M11 5 6 9H2v6h4l5 4z" />
-      {on ? <path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14" /> : <path d="m22 9-6 6M16 9l6 6" />}
-    </svg>
-  );
-}
-
 // Voz de la entrevista. "Conversar por voz" usa la voz en tiempo real de OpenAI (realtime): Nuna
 // habla con voz natural y escucha continuamente. Si no se puede, usa la voz con IA por partes
 // (aiVoice: audio + grabación) y, sin IA, la voz y el reconocimiento del navegador.
@@ -443,21 +434,30 @@ export function InterviewChat({
   }
 
   const voiceReady = support.listen && support.speak;
-  const status = connecting
-    ? "Conectando la voz de Nuna…"
+  const busy = connecting || pending || transcribing;
+  const title = connecting
+    ? "Conectando…"
     : speaking
-      ? "Nuna está hablando…"
-      : live
-        ? pending
-          ? "Nuna está anotando tu respuesta…"
-          : "Te escucho. Habla cuando quieras; al terminar, haz una pausa."
+      ? "Nuna está hablando"
+      : pending || transcribing
+        ? "Nuna está anotando…"
         : listening
-          ? "Te escucho… cuando termines, haz una pausa."
-          : transcribing
-            ? "Nuna está entendiendo lo que dijiste…"
-            : voiceMode
-              ? "Nuna te lee cada pregunta y escucha tu respuesta."
-              : "Nuna te lee las preguntas y tú contestas hablando.";
+          ? "Te escucho"
+          : "Tu turno";
+  const status = speaking
+    ? "Escucha la pregunta. Luego contesta hablando."
+    : busy
+      ? "Un momento…"
+      : "Habla cuando quieras. Al terminar, haz una pausa.";
+
+  function hush() {
+    rtRef.current?.stopSpeaking();
+    queueRef.current = [];
+    afterSpeakRef.current = null;
+    audioRef.current?.pause();
+    if (canSpeak()) window.speechSynthesis.cancel();
+    setSpeaking(false);
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -486,38 +486,65 @@ export function InterviewChat({
         )}
       </div>
 
-      {open && voiceReady && (
-        <div className="flex flex-wrap items-center gap-3">
+      {open && voiceReady && !voiceMode && (
+        <button
+          type="button"
+          onClick={toggleVoiceMode}
+          className="flex w-full items-center gap-4 rounded-2xl border border-lime/40 bg-lime/10 p-4 text-left transition hover:bg-lime/15"
+        >
+          <span className="relative flex size-14 shrink-0 items-center justify-center rounded-full bg-lime text-lime-ink">
+            <span aria-hidden className="absolute inset-0 rounded-full bg-lime/40 motion-safe:animate-ping [animation-duration:2.5s]" />
+            <MicIcon className="relative size-6" />
+          </span>
+          <span className="flex flex-col gap-0.5">
+            <span className="text-lg font-semibold">Conversar por voz con Nuna</span>
+            <span className="text-sm text-muted">Ella te pregunta y tú contestas hablando, como una llamada.</span>
+          </span>
+        </button>
+      )}
+
+      {open && voiceMode && (
+        <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-lime/40 bg-panel p-4">
+          {/* En tiempo real escucha sola; en el respaldo, tocar el círculo termina o empieza a escuchar. */}
           <button
             type="button"
-            onClick={toggleVoiceMode}
-            aria-pressed={voiceMode}
-            className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition ${
-              voiceMode ? "border-lime bg-lime text-lime-ink" : "border-line text-bone hover:bg-panel"
+            onClick={onMic}
+            disabled={live || speaking || busy}
+            aria-label={listening ? "Terminé de hablar" : "Responder hablando"}
+            className={`relative flex size-14 shrink-0 items-center justify-center rounded-full transition disabled:cursor-default ${
+              listening && !speaking ? "bg-red-500 text-white" : "bg-lime text-lime-ink"
             }`}
+            style={listening && !speaking ? { boxShadow: `0 0 0 ${4 + level * 12}px rgb(239 68 68 / 0.25)` } : undefined}
           >
-            <SpeakerIcon on={voiceMode} />
-            {voiceMode ? "Conversando por voz" : "Conversar por voz"}
+            {speaking ? (
+              <span className="flex h-6 items-center gap-1">
+                {[0, 1, 2, 3].map((i) => (
+                  <span key={i} className="eq-bar h-full w-1.5 rounded-full bg-lime-ink" style={{ animationDelay: `${i * 0.15}s` }} />
+                ))}
+              </span>
+            ) : busy ? (
+              <span className="size-6 rounded-full border-2 border-lime-ink/30 border-t-lime-ink motion-safe:animate-spin" />
+            ) : (
+              <>
+                {!listening && <span className="absolute inset-0 rounded-full bg-lime/40 motion-safe:animate-ping [animation-duration:2s]" />}
+                <MicIcon className="relative size-6" />
+              </>
+            )}
           </button>
-          <span className="text-sm text-muted" role="status">
-            {status}
-          </span>
-          {speaking && (
-            <button
-              type="button"
-              onClick={() => {
-                rtRef.current?.stopSpeaking();
-                queueRef.current = [];
-                afterSpeakRef.current = null;
-                audioRef.current?.pause();
-                if (canSpeak()) window.speechSynthesis.cancel();
-                setSpeaking(false);
-              }}
-              className="min-h-9 rounded-full border border-line px-3 text-xs text-muted hover:text-bone"
-            >
-              Callar
+          <div className="min-w-0 flex-1" role="status">
+            <p className="font-semibold">{title}</p>
+            <p className="text-sm text-muted">{status}</p>
+          </div>
+          <div className="flex gap-2">
+            {speaking && (
+              <button type="button" onClick={hush} className="min-h-11 rounded-full border border-line px-4 text-sm hover:bg-panel-2">
+                Callar
+              </button>
+            )}
+            <button type="button" onClick={toggleVoiceMode} className="min-h-11 rounded-full border border-line px-4 text-sm text-muted hover:bg-panel-2 hover:text-bone">
+              Terminar
             </button>
-          )}
+          </div>
         </div>
       )}
 
@@ -531,7 +558,7 @@ export function InterviewChat({
           }}
           className="flex gap-2"
         >
-          {support.listen && !live && (
+          {support.listen && !voiceMode && (
             <button
               type="button"
               onClick={onMic}

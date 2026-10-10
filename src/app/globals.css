@@ -28,3 +28,23 @@ body {
   outline: 2px solid var(--color-lime);
   outline-offset: 2px;
 }
+
+/* Barras de voz cuando Nuna habla (entrevista por voz). */
+@keyframes eq {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.eq-bar {
+  transform-origin: center;
+  animation: eq 0.9s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .eq-bar {
+    animation: none;
+  }
+}
