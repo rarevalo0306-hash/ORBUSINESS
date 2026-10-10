@@ -20,6 +20,36 @@ function MicIcon({ className = "size-5" }: { className?: string }) {
   );
 }
 
+// Nuna "escribe" sus mensajes nuevos letra por letra (unos 2 segundos, sin importar el largo).
+function TypeText({ text, animate, onTick }: { text: string; animate: boolean; onTick?: () => void }) {
+  const [shown, setShown] = useState(animate ? 0 : text.length);
+  useEffect(() => {
+    if (!animate || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setShown(text.length); // eslint-disable-line react-hooks/set-state-in-effect -- sin animación: todo de una vez
+      return;
+    }
+    const step = Math.max(1, Math.ceil(text.length / 110));
+    const timer = setInterval(() => {
+      setShown((n) => {
+        if (n + step >= text.length) clearInterval(timer);
+        return Math.min(text.length, n + step);
+      });
+      onTick?.();
+    }, 20);
+    return () => clearInterval(timer);
+  }, [text, animate, onTick]);
+  if (shown >= text.length) return <>{text}</>;
+  return (
+    <>
+      <span aria-hidden>
+        {text.slice(0, shown)}
+        <span className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] bg-lime motion-safe:animate-pulse" />
+      </span>
+      <span className="sr-only">{text}</span>
+    </>
+  );
+}
+
 // Voz de la entrevista. "Conversar por voz" usa la voz en tiempo real de OpenAI (realtime): Nuna
 // habla con voz natural y escucha continuamente. Si no se puede, usa la voz con IA por partes
 // (aiVoice: audio + grabación) y, sin IA, la voz y el reconocimiento del navegador.
@@ -65,6 +95,10 @@ export function InterviewChat({
 
   const lastNuna = messages.filter((m) => m.role !== "owner").at(-1)?.id ?? null;
   const spokenRef = useRef<string | null>(lastNuna); // lo que ya estaba al abrir no se vuelve a leer
+  // Mensajes que ya estaban al abrir (no se animan). Si la plática apenas empieza (primera vez o
+  // "Empezar de nuevo"), el saludo de Nuna sí se escribe en vivo.
+  const [seen] = useState(() => new Set(messages.some((m) => m.role === "owner") ? messages.map((m) => m.id) : []));
+  const scrollDown = useCallback(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight }), []);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -480,7 +514,9 @@ export function InterviewChat({
           ) : (
             <div key={m.id} className="flex max-w-[90%] gap-3">
               <Fish size={26} className="mt-0.5 shrink-0 text-lime" />
-              <p className="text-[17px] leading-relaxed">{m.content}</p>
+              <p className="text-[17px] leading-relaxed">
+                <TypeText text={m.content} animate={!seen.has(m.id)} onTick={scrollDown} />
+              </p>
             </div>
           ),
         )}
