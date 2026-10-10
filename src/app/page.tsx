@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Fish, Wordmark } from "@/components/fish";
 import { ButtonLink } from "@/components/ui";
 
@@ -43,6 +44,10 @@ export default function Home() {
           </li>
         ))}
       </ol>
+      <footer className="flex gap-6 border-t border-line pt-6 text-sm text-muted">
+        <Link href="/privacidad" className="underline underline-offset-4 hover:text-bone">Privacidad</Link>
+        <Link href="/terminos" className="underline underline-offset-4 hover:text-bone">Términos</Link>
+      </footer>
     </main>
   );
 }
