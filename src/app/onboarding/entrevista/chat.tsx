@@ -29,12 +29,14 @@ export function InterviewChat({
   lang = "es-MX",
   aiVoice = false,
   realtime = false,
+  ownerName = null,
 }: {
   messages: Message[];
   open: boolean;
   lang?: string;
   aiVoice?: boolean;
   realtime?: boolean;
+  ownerName?: string | null;
 }) {
   const [draft, setDraft] = useState("");
   const [pending, startTransition] = useTransition();
@@ -355,7 +357,12 @@ export function InterviewChat({
     unlockAudio();
     const last = messages.filter((m) => m.role !== "owner").at(-1);
     if (realtime && canRealtime()) {
-      void startRealtime(last?.content ?? null);
+      // Al conectarse saluda primero; si ya iban a media plática, retoma donde iban.
+      const started = messages.some((m) => m.role === "owner");
+      const first = ownerName?.split(/\s+/)[0];
+      void startRealtime(
+        last ? (started ? `¡Hola${first ? `, ${first}` : ""}! Qué gusto escucharte. Seguimos donde íbamos: ${last.content}` : last.content) : null,
+      );
       return;
     }
     const then = () => {

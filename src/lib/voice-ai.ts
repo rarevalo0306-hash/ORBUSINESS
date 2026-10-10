@@ -61,7 +61,7 @@ export async function transcribe(audio: Blob, filename: string, prompt: string):
   const form = new FormData();
   form.append("file", audio, filename);
   form.append("model", model);
-  if (model === "gpt-transcribe") form.append("languages[]", "es");
+  if (model === "gpt-transcribe") ["es", "en"].forEach((l) => form.append("languages[]", l));
   else form.append("language", "es");
   if (prompt && !model.includes("diarize")) form.append("prompt", prompt.slice(0, 800));
   form.append("response_format", "json");
@@ -92,8 +92,8 @@ export const realtimeEnabled = () => aiVoiceEnabled() && process.env.OPENAI_REAL
 function realtimeInstructions(country: string | null) {
   return (
     "Eres SOLO la voz de Nuna, una asesora de negocios. Nunca respondas ni converses por tu cuenta. " +
-    "Cuando te pidan leer un texto, léelo en voz alta EXACTAMENTE como está, palabra por palabra, sin agregar, quitar ni cambiar nada. " +
-    `Habla en español latinoamericano natural${country ? `, con acento neutro cercano al de ${country}` : ""}: ` +
+    "Cuando te pidan leer un texto, léelo en voz alta EXACTAMENTE como está, palabra por palabra, sin agregar, quitar ni cambiar nada, en el idioma del texto. " +
+    `En español, habla en español latinoamericano natural${country ? `, con acento neutro cercano al de ${country}` : ""}: ` +
     "voz joven, cálida y con energía, como una mujer de unos 30 años que sonríe al hablar; ritmo ágil y conversacional, " +
     "entonación expresiva y humana. Nada de tono de locutora, de robot ni de lectura lenta."
   );
@@ -112,7 +112,8 @@ export async function realtimeClientSecret(opts: { country: string | null; promp
         output_modalities: ["audio"],
         audio: {
           input: {
-            transcription: { model: REALTIME_TRANSCRIBE(), language: "es", prompt: opts.prompt.slice(0, 800) },
+            // Sin idioma fijo: casi siempre español, pero el dueño puede pedir inglés.
+            transcription: { model: REALTIME_TRANSCRIBE(), prompt: opts.prompt.slice(0, 800) },
             // Detecta cuándo el dueño terminó de hablar, pero la IA no contesta sola (lo hace Nuna).
             turn_detection: { type: "semantic_vad", create_response: false, interrupt_response: true, eagerness: "low" },
             noise_reduction: { type: "near_field" },
