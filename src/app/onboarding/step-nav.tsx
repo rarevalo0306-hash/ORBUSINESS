@@ -29,7 +29,7 @@ export function StepNav({ reached }: { reached: string }) {
       <div className="h-1.5 overflow-hidden rounded-full bg-panel-2" aria-hidden>
         <div className="h-full rounded-full bg-lime transition-all duration-500" style={{ width: `${(done / STEPS.length) * 100}%` }} />
       </div>
-      <ol className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
+      <ol className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
         {STEPS.map((s, i) => {
           const current = i === currentIndex;
           const open = i <= reachedIndex;

@@ -47,7 +47,7 @@ export default async function InterviewPage() {
             : "Contesta con tus palabras. Nuna está en modo básico (sin IA): entiende respuestas sencillas."
         }
       />
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="flex flex-col gap-3">
           <InterviewChat messages={messages ?? []} open={open} lang={voiceLang(business.country_code)} aiVoice={aiVoiceEnabled()} realtime={realtimeEnabled()} />
           {missing.length > 0 && (
