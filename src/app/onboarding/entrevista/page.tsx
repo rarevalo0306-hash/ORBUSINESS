@@ -2,6 +2,7 @@ import { ButtonLink, Card, PageTitle } from "@/components/ui";
 import { requireBusiness } from "@/lib/business";
 import { QUESTIONS, describeAnswer, missingQuestions } from "@/lib/interview";
 import { nunaUsesAI } from "@/lib/nuna";
+import { voiceLang } from "@/lib/voice";
 import { completeMissing, startFix } from "./actions";
 import { InterviewChat } from "./chat";
 import { RestartButton } from "./restart-button";
@@ -41,13 +42,13 @@ export default async function InterviewPage() {
         title="Platícame de tu negocio"
         lead={
           nunaUsesAI()
-            ? "Contesta con tus palabras. Nuna (con IA) entiende tus respuestas y arma todo con ellas."
+            ? "Contesta con tus palabras, escribiendo o hablando. Nuna (con IA) entiende tus respuestas y arma todo con ellas."
             : "Contesta con tus palabras. Nuna está en modo básico (sin IA): entiende respuestas sencillas."
         }
       />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="flex flex-col gap-3">
-          <InterviewChat messages={messages ?? []} open={open} />
+          <InterviewChat messages={messages ?? []} open={open} lang={voiceLang(business.country_code)} />
           {missing.length > 0 && (
             <form action={completeMissing} className="flex flex-wrap items-center gap-3 rounded-2xl border border-lime/40 bg-lime/10 p-4">
               <p className="flex-1">
