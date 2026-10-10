@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Fish } from "@/components/fish";
 import { canSpeak, pickVoice, recognitionClass, sentences, speakable, type Recognition } from "@/lib/voice";
@@ -7,7 +8,7 @@ import { canRealtime, RealtimeVoice } from "@/lib/voice-realtime";
 import { canRecord, startRecording, type RecorderHandle } from "@/lib/voice-recorder";
 import { answerInterview } from "./actions";
 
-type Message = { id: string; role: string; content: string };
+type Message = { id: string; role: string; content: string; step_key?: string | null };
 
 const VOICE_KEY = "orbusiness:voz-entrevista";
 
@@ -60,6 +61,7 @@ export function InterviewChat({
   aiVoice = false,
   realtime = false,
   ownerName = null,
+  nextHref = null,
 }: {
   messages: Message[];
   open: boolean;
@@ -67,7 +69,9 @@ export function InterviewChat({
   aiVoice?: boolean;
   realtime?: boolean;
   ownerName?: string | null;
+  nextHref?: string | null; // a dónde pasar solo cuando Nuna cierra la entrevista
 }) {
+  const router = useRouter();
   const [draft, setDraft] = useState("");
   const [pending, startTransition] = useTransition();
   const listRef = useRef<HTMLDivElement>(null);
@@ -92,6 +96,8 @@ export function InterviewChat({
   const [live, setLive] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const pendingRef = useRef(false);
+  const leaveRef = useRef<(() => void) | null>(null); // pasar al siguiente paso cuando Nuna termine de hablar
+  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const lastNuna = messages.filter((m) => m.role !== "owner").at(-1)?.id ?? null;
   const spokenRef = useRef<string | null>(lastNuna); // lo que ya estaba al abrir no se vuelve a leer
@@ -359,6 +365,7 @@ export function InterviewChat({
       if (canSpeak()) window.speechSynthesis.cancel();
       void audioCtxRef.current?.close().catch(() => {});
       rtRef.current?.close();
+      if (leaveTimer.current) clearTimeout(leaveTimer.current);
     };
   }, [aiVoice, realtime]);
 
@@ -367,17 +374,24 @@ export function InterviewChat({
     if (!lastNuna || lastNuna === spokenRef.current) return;
     const from = messages.findIndex((m) => m.id === spokenRef.current);
     spokenRef.current = lastNuna;
-    if (!voiceModeRef.current) return;
     const fresh = messages.slice(from + 1).filter((m) => m.role !== "owner");
+    // Nuna cerró la entrevista: cuando termine de despedirse, se pasa solo al siguiente paso.
+    const leave = nextHref && fresh.some((m) => m.step_key === "done") ? () => (stopAll(), router.push(nextHref)) : null;
+    if (!voiceModeRef.current) {
+      if (leave) leaveTimer.current = setTimeout(leave, 9000); // tiempo para leer la despedida
+      return;
+    }
     if (rtRef.current) {
       // En tiempo real Nuna lee y luego sigue escuchando sola.
+      leaveRef.current = leave;
       for (const m of fresh) rtRef.current.speak(m.content);
       return;
     }
     speak(fresh, () => {
-      if (voiceModeRef.current && open) listen(true);
+      if (leave) leave();
+      else if (voiceModeRef.current && open) listen(true);
     });
-  }, [lastNuna, messages, open, speak, listen]);
+  }, [lastNuna, messages, open, speak, listen, nextHref, router, stopAll]);
 
   function toggleVoiceMode() {
     const next = !voiceMode;
@@ -410,7 +424,14 @@ export function InterviewChat({
   async function startRealtime(firstText: string | null) {
     setConnecting(true);
     const rt = new RealtimeVoice({
-      onSpeaking: setSpeaking,
+      onSpeaking: (on) => {
+        setSpeaking(on);
+        const leave = leaveRef.current;
+        if (!on && leave) {
+          leaveRef.current = null;
+          leave();
+        }
+      },
       onListening: setListening,
       onTranscript: (text) => {
         if (!voiceModeRef.current) return;

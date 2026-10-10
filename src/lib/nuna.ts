@@ -553,6 +553,7 @@ export async function converse(opts: {
 }): Promise<{ reply: string; finished: boolean; facts: Facts } | null> {
   const form = { tu: "tú", usted: "usted", vos: "vos" }[ownerForm(opts.b)];
   const market = marketContext(marketFor(opts.b.country_code));
+  const started = Date.now();
   const out = await aiJson({
     system:
       NUNA_PERSONA +
@@ -560,31 +561,39 @@ export async function converse(opts: {
       `Qué hace Orbusiness: ${ORBUSINESS_PITCH} ` +
       "Cómo platicas: reacciona a lo que te dice (con algo concreto de lo que contó, no frases genéricas), y luego pregunta UNA cosa a la vez de lo que falta, " +
       "en un orden natural (primero quién es y su negocio, luego qué vende y dónde, luego cómo trabaja y cobra). " +
+      "Cuando ya sepas cómo se llama su negocio, pregúntale UNA sola vez (si no lo ha dicho) si ya tiene logo o marca y si ya tiene página web, " +
+      "y toma en cuenta su respuesta (lo que ya tiene se aprovecha; no le vendas lo que ya tiene). " +
+      "Nunca juzgues ni te sorprendas de sus horarios, precios o forma de trabajar (nada de '¡uy!', '¡wow!', 'qué pesado' ni 'qué cansado'): " +
+      "reacciona con respeto y con algo útil para su negocio. " +
       "Si te da varios datos juntos, apúntalos todos y no los vuelvas a preguntar. Si algo no quedó claro o parece mal escuchado (nombres raros, palabras cortadas), " +
       "pregunta para confirmar en vez de suponer. Si te corrige, acéptalo con naturalidad y usa lo nuevo. Si te pregunta algo, contéstale breve y sigue. " +
       "Si pregunta precios, no inventes cifras: dile que al final le muestras los planes. " +
       "Mensajes cortos (máximo 3 oraciones), como en WhatsApp, en el español natural del país (o en inglés si lo pidió); nada de listas ni de sonar a formulario. Nunca inventes datos. " +
       `Háblale de ${form}. ${market ?? ""} ` +
-      "facts: TODOS los datos que el dueño ha dicho en TODA la plática (si cambió algo, lo último que dijo); lo que no ha dicho va en null. " +
-      "business_name es el nombre del negocio tal cual (puede estar en inglés). services: productos o categorías y/o servicios con precio solo si lo dijo. " +
-      "finished: true solo cuando ya no falta ningún dato; entonces reply es un cierre cálido y breve, sin preguntas.",
+      // Solo lo nuevo: lo anterior ya está guardado, y una respuesta corta sale más rápido.
+      "facts: SOLO los datos que el dueño dijo o corrigió en su ÚLTIMO mensaje (puedes usar la plática para entenderlo); omite todas las demás claves. " +
+      "business_name es el nombre del negocio tal cual (puede estar en inglés). services: la lista completa de productos o categorías y/o servicios (con precio solo si lo dijo), solo si habló de eso. " +
+      "finished: true solo cuando ya no falta ningún dato; entonces reply agradece brevemente lo último que dijo, sin preguntas (después se le pregunta si quiere agregar algo).",
     user: [
       `Lo que ya está guardado: ${opts.known.join("; ") || "nada todavía"}.`,
       opts.missing.length
         ? `Lo que todavía falta saber (pregúntalo con tus palabras; esta es la forma sugerida):\n${opts.missing.map((m) => `- ${m.label}: ${m.ask} (dato: ${m.hint})`).join("\n")}`
-        : "Ya no falta nada: cierra la plática.",
+        : "Ya no falta nada: agradece lo último que dijo, sin preguntas.",
       "",
       "Plática hasta ahora:",
       ...opts.history.map((m) => `${m.role === "owner" ? "Dueño" : "Nuna"}: ${m.content}`),
     ].join("\n"),
     schema: ChatSchema,
     jsonHint:
-      'Formato: {"reply": "lo que le dices", "finished": false, "facts": {"owner_name": null, "business_name": null, "country": null, "city": null, ' +
-      '"business_type": "products|services|both|null", "industry": null, "services": [{"name": "...", "price": null}], "currency_choice": "local|other|both|null", ' +
-      '"hours": null, "phone": null, "address": null, "lead_sources": null, "visit_before_quote": null, "payment_timing": "before|deposit|after|at_sale|credit|null", ' +
-      '"payment_methods": ["..."], "offers_delivery": null, "has_recurring_clients": null, "address_form": "tu|usted|vos|null", "quote_requires_approval": null}}',
-    maxTokens: 2500,
+      'Formato: {"reply": "lo que le dices", "finished": false, "facts": {solo las claves que dijo en su último mensaje}}. ' +
+      'Ejemplo: {"reply": "...", "finished": false, "facts": {"hours": "lunes a domingo 6am a 10pm", "offers_delivery": true}}. ' +
+      "Claves posibles de facts: owner_name, business_name, country, city, business_type (products|services|both), industry, " +
+      'services ([{"name": "...", "price": null}]), currency_choice (local|other|both), hours, phone, address, lead_sources, visit_before_quote (bool), ' +
+      "payment_timing (before|deposit|after|at_sale|credit), payment_methods ([...]), offers_delivery (bool), has_recurring_clients (bool), " +
+      "address_form (tu|usted|vos), quote_requires_approval (bool).",
+    maxTokens: 1200,
     temperature: 0.7,
   });
+  console.info(`Nuna: plática respondió en ${Date.now() - started} ms`);
   return out ? { reply: out.reply.trim(), finished: out.finished, facts: out.facts } : null;
 }

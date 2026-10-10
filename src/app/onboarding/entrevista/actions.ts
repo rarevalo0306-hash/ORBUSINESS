@@ -5,6 +5,7 @@ import { requireBusiness } from "@/lib/business";
 import {
   CLOSING,
   QUESTIONS,
+  WRAPUP,
   answeredKeysOf,
   describeAnswer,
   industryFromName,
@@ -87,7 +88,14 @@ export async function answerInterview(text: string) {
   const step = await currentStep(supabase, business.id);
   if (step === "done") return; // entrevista terminada
   // Con IA, Nuna platica libremente y llena todo con lo que escuchó; si la IA falla, sigue por pasos.
-  if (nunaUsesAI() && (await chatTurn(supabase, user.id, business, answer))) return;
+  if (nunaUsesAI() && (await chatTurn(supabase, user.id, business, answer, step))) return;
+  if (step === "wrapup") {
+    // Contestó si quería agregar algo (sin IA no se puede sacar más datos): se cierra.
+    await supabase.from("interview_messages").insert({ business_id: business.id, role: "owner", step_key: step, content: answer });
+    await finish(supabase, business);
+    revalidatePath("/onboarding", "layout");
+    return;
+  }
 
   const parsed = parseStep(step);
   const fixing = parsed.fixing;
@@ -145,8 +153,7 @@ export async function answerInterview(text: string) {
     const lead = fixing ? `${result.ack} Listo, corregido. Sigamos:` : result.ack;
     await nuna(supabase, business.id, next.key, `${lead} ${next.text(updated)}`);
   } else if (updated.onboarding_step === "interview") {
-    await nuna(supabase, business.id, "done", `${result.ack} ${CLOSING(updated.owner_name, updated)}`);
-    await supabase.from("businesses").update({ onboarding_step: "brand" }).eq("id", business.id);
+    await nuna(supabase, business.id, "wrapup", `${result.ack} ${WRAPUP(updated)}`);
   } else {
     await nuna(supabase, business.id, "done", `${result.ack} Listo, ya quedó todo actualizado.`);
   }
@@ -171,8 +178,14 @@ async function previousAnswer(supabase: Supabase, b: BusinessRow, currentKey: st
   return { key: prevQ.key, understood: describeAnswer(prevQ.key, b, services ?? [], true) };
 }
 
+// Cierra la entrevista y pasa al siguiente paso (marca).
+async function finish(supabase: Supabase, b: BusinessRow) {
+  await nuna(supabase, b.id, "done", CLOSING(b.owner_name, b));
+  await supabase.from("businesses").update({ onboarding_step: "brand" }).eq("id", b.id);
+}
+
 // Un turno de la plática libre. Devuelve false si la IA no respondió (para seguir por pasos).
-async function chatTurn(supabase: Supabase, userId: string, business: BusinessRow, answer: string): Promise<boolean> {
+async function chatTurn(supabase: Supabase, userId: string, business: BusinessRow, answer: string, step: string): Promise<boolean> {
   const [{ data: history }, { data: services }, missing] = await Promise.all([
     supabase.from("interview_messages").select("role, content").eq("business_id", business.id).order("created_at"),
     supabase.from("services").select("name, price").eq("business_id", business.id).order("sort"),
@@ -246,8 +259,9 @@ async function chatTurn(supabase: Supabase, userId: string, business: BusinessRo
   const still = await missingFor(supabase, updated);
   if (!still.length) {
     if (updated.onboarding_step === "interview") {
-      await nuna(supabase, business.id, "done", CLOSING(updated.owner_name, updated));
-      await supabase.from("businesses").update({ onboarding_step: "brand" }).eq("id", business.id);
+      // Primero pregunta si quiere agregar algo; con lo que conteste (ya guardado arriba), cierra.
+      if (step === "wrapup") await finish(supabase, updated);
+      else await nuna(supabase, business.id, "wrapup", `${out.reply} ${WRAPUP(updated)}`);
     } else {
       await nuna(supabase, business.id, "done", `${out.reply} Listo, ya quedó todo actualizado.`);
     }

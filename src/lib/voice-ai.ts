@@ -32,7 +32,8 @@ export async function underDailyLimit(supabase: Supabase, businessId: string, ac
 // Cómo debe sonar Nuna.
 function voiceInstructions(country: string | null) {
   return (
-    `Habla en español latinoamericano${country ? `, con un acento neutro cercano al de ${country}` : ""}. ` +
+    `Habla en español latinoamericano neutro${country ? `, cercano al de ${country}` : " (como una presentadora mexicana)"}; ` +
+    "nunca con acento de España ni acento estadounidense (solo los nombres propios en inglés se dicen en inglés). " +
     "Eres Nuna, una asesora de negocios: voz joven, cálida y con energía, como una mujer de unos 30 años que sonríe al hablar. " +
     "Ritmo ágil y conversacional, entonación expresiva. Nada de tono de locutora, de robot ni de lectura lenta."
   );
@@ -93,7 +94,8 @@ function realtimeInstructions(country: string | null) {
   return (
     "Eres SOLO la voz de Nuna, una asesora de negocios. Nunca respondas ni converses por tu cuenta. " +
     "Cuando te pidan leer un texto, léelo en voz alta EXACTAMENTE como está, palabra por palabra, sin agregar, quitar ni cambiar nada, en el idioma del texto. " +
-    `En español, habla en español latinoamericano natural${country ? `, con acento neutro cercano al de ${country}` : ""}: ` +
+    `En español, usa SIEMPRE acento latinoamericano neutro${country ? `, cercano al de ${country}` : " (como una presentadora mexicana)"}, ` +
+    "nunca de España ni estadounidense: " +
     "voz joven, cálida y con energía, como una mujer de unos 30 años que sonríe al hablar; ritmo ágil y conversacional, " +
     "entonación expresiva y humana. Nada de tono de locutora, de robot ni de lectura lenta."
   );
@@ -114,8 +116,9 @@ export async function realtimeClientSecret(opts: { country: string | null; promp
           input: {
             // Sin idioma fijo: casi siempre español, pero el dueño puede pedir inglés.
             transcription: { model: REALTIME_TRANSCRIBE(), prompt: opts.prompt.slice(0, 800) },
-            // Detecta cuándo el dueño terminó de hablar, pero la IA no contesta sola (lo hace Nuna).
-            turn_detection: { type: "semantic_vad", create_response: false, interrupt_response: true, eagerness: "low" },
+            // Detecta cuándo el dueño terminó de hablar, pero la IA no contesta sola (lo hace Nuna) ni se
+            // calla sola: la interrupción la decide el navegador, para que un ruido corto no la corte.
+            turn_detection: { type: "semantic_vad", create_response: false, interrupt_response: false, eagerness: "medium" },
             noise_reduction: { type: "near_field" },
           },
           output: { voice: REALTIME_VOICE(), speed: 1.05 },

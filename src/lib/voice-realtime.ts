@@ -9,6 +9,15 @@ export type RealtimeEvents = {
   onClosed?: (reason: string) => void;
 };
 
+// Ruido que el transcriptor convierte en "texto": sonidos sueltos ("mmm", "eh", ".") o las frases
+// que inventa cuando solo hay ruido de fondo.
+export function isNoise(text: string) {
+  const t = text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zñ0-9\s]/g, "").trim();
+  if (t.replace(/\s/g, "").length < 2) return true;
+  if (/^(m+|mh+m*|e+h+|a+h+|u+h+|hm+|ah+a+|ja(ja)+)$/.test(t)) return true;
+  return /^(gracias por ver( el video)?|subtitulos (realizados )?por .*|thanks for watching|thank you)$/.test(t);
+}
+
 export const canRealtime = () =>
   typeof window !== "undefined" && typeof RTCPeerConnection !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
 
@@ -27,6 +36,7 @@ export class RealtimeVoice {
   private userTalking = false;
   private segmentsPending = 0;
   private merge: ReturnType<typeof setTimeout> | null = null;
+  private bargeIn: ReturnType<typeof setTimeout> | null = null;
   speaking = false;
 
   constructor(private events: RealtimeEvents = {}) {}
@@ -95,6 +105,7 @@ export class RealtimeVoice {
     this.closed = true;
     if (this.watchdog) clearTimeout(this.watchdog);
     if (this.merge) clearTimeout(this.merge);
+    if (this.bargeIn) clearTimeout(this.bargeIn);
     this.dc?.close();
     this.pc?.close();
     this.mic?.getTracks().forEach((t) => t.stop());
@@ -154,9 +165,13 @@ export class RealtimeVoice {
       response: {
         conversation: "none",
         output_modalities: ["audio"],
+        // Estas instrucciones reemplazan las de la sesión en cada frase: por eso el acento va aquí.
         instructions:
           "Lee en voz alta EXACTAMENTE el texto entre comillas angulares, palabra por palabra, sin agregar saludo, " +
-          `comentario ni pregunta extra, con tu voz natural y expresiva: «${text}»`,
+          "comentario ni pregunta extra. Voz de mujer joven y cálida, ritmo ágil y natural. " +
+          "Si el texto está en español, usa SIEMPRE acento latinoamericano neutro (como una presentadora mexicana): " +
+          "nunca acento de España (sin ceceo ni la z de España) y nunca acento estadounidense; solo los nombres propios en inglés se dicen en inglés. " +
+          `Texto: «${text}»`,
       },
     });
   }
@@ -170,14 +185,21 @@ export class RealtimeVoice {
     }
     switch (event.type) {
       case "input_audio_buffer.speech_started":
-        // El dueño habla: si Nuna estaba hablando, se calla para escucharlo.
+        // El dueño habla: si Nuna estaba hablando, se calla para escucharlo. Se espera un momento
+        // para que un ruido corto (tos, puerta, perro) no la interrumpa.
         this.userTalking = true;
         if (this.merge) clearTimeout(this.merge);
-        if (this.speaking) this.stopSpeaking();
+        if (this.speaking && !this.bargeIn)
+          this.bargeIn = setTimeout(() => {
+            this.bargeIn = null;
+            if (this.userTalking && this.speaking) this.stopSpeaking();
+          }, 700);
         this.events.onListening?.(true);
         break;
       case "input_audio_buffer.speech_stopped":
         this.userTalking = false;
+        if (this.bargeIn) clearTimeout(this.bargeIn);
+        this.bargeIn = null;
         this.segmentsPending++;
         this.scheduleHeard();
         this.events.onListening?.(false);
@@ -185,7 +207,7 @@ export class RealtimeVoice {
       case "conversation.item.input_audio_transcription.completed": {
         this.segmentsPending = Math.max(0, this.segmentsPending - 1);
         const text = event.transcript?.trim();
-        if (text && !this.isEcho(text)) this.heard.push(text);
+        if (text && !this.isEcho(text) && !isNoise(text)) this.heard.push(text);
         this.scheduleHeard();
         break;
       }

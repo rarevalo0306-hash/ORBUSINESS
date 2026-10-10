@@ -332,6 +332,14 @@ export const QUESTIONS: Question[] = [
   },
 ];
 
+// Antes de cerrar, Nuna pregunta si el dueño quiere agregar algo (paso "wrapup").
+export const WRAPUP = (b: Pick<BusinessRow, "country_code">) =>
+  say(ownerForm(b), {
+    tu: "Ya tengo todo lo que necesito. ¿Hay algo más que quieras contarme de tu negocio antes de que arme todo?",
+    usted: "Ya tengo todo lo que necesito. ¿Hay algo más que quiera contarme de su negocio antes de que arme todo?",
+    vos: "Ya tengo todo lo que necesito. ¿Hay algo más que querás contarme de tu negocio antes de que arme todo?",
+  });
+
 export const CLOSING = (owner: string | null, b: Pick<BusinessRow, "country_code">) =>
   `Listo${owner ? `, ${owner}` : ""}. ` +
   say(ownerForm(b), {

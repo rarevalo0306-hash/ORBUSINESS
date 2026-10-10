@@ -49,7 +49,9 @@ export default async function InterviewPage() {
       />
       <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="flex flex-col gap-3">
-          <InterviewChat messages={messages ?? []} open={open} lang={voiceLang(business.country_code)} aiVoice={aiVoiceEnabled()} realtime={realtimeEnabled()} ownerName={business.owner_name} />
+          <InterviewChat messages={messages ?? []} open={open} lang={voiceLang(business.country_code)} aiVoice={aiVoiceEnabled()} realtime={realtimeEnabled()} ownerName={business.owner_name}
+            nextHref={business.onboarding_step === "brand" ? "/onboarding/marca" : null}
+          />
           {missing.length > 0 && (
             <form action={completeMissing} className="flex flex-wrap items-center gap-3 rounded-[24px] border border-lime/40 bg-lime/10 p-5">
               <p className="flex-1">
