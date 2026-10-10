@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Fish } from "@/components/fish";
 import { Button } from "@/components/ui";
 import { canSpeak, pickVoice, recognitionClass, sentences, speakable, type Recognition } from "@/lib/voice";
+import { canRecord, startRecording, type RecorderHandle } from "@/lib/voice-recorder";
 import { answerInterview } from "./actions";
 
 type Message = { id: string; role: string; content: string };
@@ -28,19 +29,40 @@ function SpeakerIcon({ className = "size-5", on }: { className?: string; on: boo
   );
 }
 
-export function InterviewChat({ messages, open, lang = "es-MX" }: { messages: Message[]; open: boolean; lang?: string }) {
+// Voz de la entrevista. Con la IA de voz (aiVoice), Nuna habla con voz natural de OpenAI y lo que
+// dice el dueño se graba y se transcribe con IA. Sin ella, se usa la voz y el reconocimiento del navegador.
+export function InterviewChat({
+  messages,
+  open,
+  lang = "es-MX",
+  aiVoice = false,
+}: {
+  messages: Message[];
+  open: boolean;
+  lang?: string;
+  aiVoice?: boolean;
+}) {
   const [draft, setDraft] = useState("");
   const [pending, startTransition] = useTransition();
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Voz: qué soporta este navegador (se revisa ya en el navegador para no romper el primer render).
   const [support, setSupport] = useState({ listen: false, speak: false });
   const [voiceMode, setVoiceMode] = useState(false);
   const [listening, setListening] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [level, setLevel] = useState(0);
   const [hint, setHint] = useState<string | null>(null);
-  const recRef = useRef<Recognition | null>(null);
+
   const voiceModeRef = useRef(false);
+  const recRef = useRef<Recognition | null>(null); // reconocimiento del navegador
+  const recorderRef = useRef<RecorderHandle | null>(null); // grabadora (IA)
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const queueRef = useRef<Message[]>([]);
+  const afterSpeakRef = useRef<(() => void) | null>(null);
+  const useAi = useRef(aiVoice);
+
   const lastNuna = messages.filter((m) => m.role !== "owner").at(-1)?.id ?? null;
   const spokenRef = useRef<string | null>(lastNuna); // lo que ya estaba al abrir no se vuelve a leer
 
@@ -57,19 +79,40 @@ export function InterviewChat({ messages, open, lang = "es-MX" }: { messages: Me
     [pending],
   );
 
-  const stopListening = useCallback(() => {
+  // Audio y micrófono se "despiertan" con un toque del dueño (requisito de los navegadores, sobre todo iPhone).
+  function unlockAudio() {
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
+      audioRef.current.preload = "auto";
+    }
+    if (!audioCtxRef.current && typeof AudioContext !== "undefined") {
+      try {
+        audioCtxRef.current = new AudioContext();
+      } catch {}
+    }
+    audioCtxRef.current?.resume().catch(() => {});
+  }
+
+  const stopAll = useCallback(() => {
     recRef.current?.abort();
     recRef.current = null;
+    recorderRef.current?.cancel();
+    recorderRef.current = null;
+    queueRef.current = [];
+    afterSpeakRef.current = null;
+    audioRef.current?.pause();
+    if (canSpeak()) window.speechSynthesis.cancel();
     setListening(false);
+    setSpeaking(false);
+    setLevel(0);
   }, []);
 
-  // Escucha al dueño. En modo voz, al terminar de hablar la respuesta se envía sola;
-  // con el micrófono suelto, el texto queda en la caja para revisarlo y enviarlo.
-  const listen = useCallback(
+  // ---------- Escuchar ----------
+
+  const listenBrowser = useCallback(
     (autoSend: boolean) => {
       const Rec = recognitionClass();
       if (!Rec || recRef.current) return;
-      window.speechSynthesis?.cancel();
       const rec = new Rec();
       rec.lang = lang;
       rec.interimResults = true;
@@ -88,11 +131,8 @@ export function InterviewChat({ messages, open, lang = "es-MX" }: { messages: Me
           setHint("Para hablar, permite el uso del micrófono en tu navegador (el ícono junto a la dirección de la página).");
           voiceModeRef.current = false;
           setVoiceMode(false);
-        } else if (e.error === "no-speech") {
-          setHint("No te escuché. Toca el micrófono y habla cuando se ponga rojo.");
-        } else if (e.error !== "aborted") {
-          setHint("No pude usar el micrófono. Puedes escribir tu respuesta.");
-        }
+        } else if (e.error === "no-speech") setHint("No te escuché. Toca el micrófono y habla cuando se ponga rojo.");
+        else if (e.error !== "aborted") setHint("No pude usar el micrófono. Puedes escribir tu respuesta.");
       };
       rec.onend = () => {
         recRef.current = null;
@@ -105,34 +145,103 @@ export function InterviewChat({ messages, open, lang = "es-MX" }: { messages: Me
         setListening(true);
         setHint(null);
       } catch {
-        // En iPhone el micrófono a veces solo arranca con un toque del dueño.
         setHint("Toca el micrófono para responder.");
       }
     },
     [draft, lang, send],
   );
 
-  // Nuna lee en voz alta; al terminar, en modo voz, se pone a escuchar.
-  const speak = useCallback(
-    (text: string, then?: () => void) => {
-      if (!canSpeak()) return then?.();
+  const listenAi = useCallback(
+    async (autoSend: boolean) => {
+      if (recorderRef.current) return;
+      let handle: RecorderHandle;
+      try {
+        handle = await startRecording({
+          audioContext: audioCtxRef.current,
+          silenceMs: autoSend ? 1500 : 2500,
+          onLevel: setLevel,
+        });
+      } catch {
+        setHint("Para hablar, permite el uso del micrófono en tu navegador (el ícono junto a la dirección de la página).");
+        voiceModeRef.current = false;
+        setVoiceMode(false);
+        return;
+      }
+      recorderRef.current = handle;
+      setListening(true);
+      setHint(audioCtxRef.current?.state === "running" ? null : "Toca el micrófono cuando termines de hablar.");
+      const rec = await handle.done;
+      recorderRef.current = null;
+      setListening(false);
+      setLevel(0);
+      if (!rec) return;
+      if (!rec.spoke) {
+        setHint("No te escuché. Toca el micrófono y habla cuando se ponga rojo.");
+        return;
+      }
+      setTranscribing(true);
+      try {
+        const body = new FormData();
+        body.append("audio", rec.blob);
+        const res = await fetch("/api/voz/escuchar", { method: "POST", body });
+        const json = (await res.json().catch(() => ({}))) as { text?: string; error?: string };
+        const text = json.text?.trim() ?? "";
+        if (!res.ok) setHint(json.error ?? "No pude entender el audio. Intenta de nuevo o escribe tu respuesta.");
+        else if (!text) setHint("No te entendí bien. Intenta de nuevo, un poco más cerca del teléfono.");
+        else if (autoSend) send(text);
+        else setDraft((d) => [d.trim(), text].filter(Boolean).join(" "));
+      } catch {
+        setHint("Se cortó la conexión. Intenta de nuevo o escribe tu respuesta.");
+      } finally {
+        setTranscribing(false);
+      }
+    },
+    [send],
+  );
+
+  const listen = useCallback(
+    (autoSend: boolean) => {
+      if (canSpeak()) window.speechSynthesis.cancel();
+      audioRef.current?.pause();
+      setSpeaking(false);
+      if (useAi.current && canRecord()) void listenAi(autoSend);
+      else listenBrowser(autoSend);
+    },
+    [listenAi, listenBrowser],
+  );
+
+  // ---------- Hablar ----------
+
+  const speakBrowser = useCallback(
+    (text: string, then: () => void) => {
+      if (!canSpeak()) return then();
       const synth = window.speechSynthesis;
       synth.cancel();
       const parts = sentences(speakable(text));
-      if (!parts.length) return then?.();
+      if (!parts.length) return then();
       const voice = pickVoice(lang);
       setSpeaking(true);
+      // Seguro: si la voz del navegador se traba (pasa en Chrome), se sigue igual al tiempo estimado.
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(watchdog);
+        setSpeaking(false);
+        then();
+      };
+      const watchdog = setTimeout(() => {
+        synth.cancel();
+        finish();
+      }, 4000 + parts.join(" ").length * 90);
       parts.forEach((part, i) => {
         const u = new SpeechSynthesisUtterance(part);
         u.lang = voice?.lang ?? lang;
         if (voice) u.voice = voice;
         u.rate = 1.03;
         if (i === parts.length - 1) {
-          u.onend = () => {
-            setSpeaking(false);
-            then?.();
-          };
-          u.onerror = () => setSpeaking(false);
+          u.onend = finish;
+          u.onerror = finish;
         }
         synth.speak(u);
       });
@@ -140,12 +249,63 @@ export function InterviewChat({ messages, open, lang = "es-MX" }: { messages: Me
     [lang],
   );
 
+  // Con IA: cada mensaje de Nuna se pide como audio (/api/voz/hablar) y se reproduce en orden.
+  const playNextRef = useRef<() => void>(() => {});
   useEffect(() => {
-    const listenOk = Boolean(recognitionClass());
-    const speakOk = canSpeak();
+    const playNext = () => {
+      const audio = audioRef.current;
+      const next = queueRef.current.shift();
+      if (!next) {
+        setSpeaking(false);
+        const then = afterSpeakRef.current;
+        afterSpeakRef.current = null;
+        then?.();
+        return;
+      }
+      if (!audio) return speakBrowser(next.content, playNext);
+      setSpeaking(true);
+      // Si falla la voz con IA, se usa la del navegador (una sola vez, aunque fallen las dos señales).
+      let fellBack = false;
+      const fallback = () => {
+        if (fellBack) return;
+        fellBack = true;
+        audio.onended = null;
+        audio.onerror = null;
+        speakBrowser(next.content, playNext);
+      };
+      audio.onended = () => playNext();
+      audio.onerror = fallback;
+      audio.src = `/api/voz/hablar?m=${encodeURIComponent(next.id)}`;
+      audio.play().catch((e: unknown) => {
+        if (!(e instanceof DOMException && e.name === "AbortError")) fallback();
+      });
+    };
+    playNextRef.current = playNext;
+  }, [speakBrowser]);
+
+  const speak = useCallback(
+    (list: Message[], then: () => void) => {
+      if (!list.length) return then();
+      if (useAi.current) {
+        audioRef.current?.pause();
+        queueRef.current = [...list];
+        afterSpeakRef.current = then;
+        playNextRef.current();
+      } else {
+        speakBrowser(list.map((m) => m.content).join(" "), then);
+      }
+    },
+    [speakBrowser],
+  );
+
+  // ---------- Montaje y mensajes nuevos ----------
+
+  useEffect(() => {
+    const listenOk = aiVoice ? canRecord() || Boolean(recognitionClass()) : Boolean(recognitionClass());
+    const speakOk = aiVoice || canSpeak();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- depende del navegador, solo se sabe ya montado
     setSupport({ listen: listenOk, speak: speakOk });
-    if (speakOk) window.speechSynthesis.getVoices(); // algunos navegadores cargan las voces tarde
+    if (canSpeak()) window.speechSynthesis.getVoices(); // algunos navegadores cargan las voces tarde
     let saved = false;
     try {
       saved = localStorage.getItem(VOICE_KEY) === "1";
@@ -156,9 +316,12 @@ export function InterviewChat({ messages, open, lang = "es-MX" }: { messages: Me
     }
     return () => {
       recRef.current?.abort();
-      if (speakOk) window.speechSynthesis.cancel();
+      recorderRef.current?.cancel();
+      audioRef.current?.pause();
+      if (canSpeak()) window.speechSynthesis.cancel();
+      void audioCtxRef.current?.close().catch(() => {});
     };
-  }, []);
+  }, [aiVoice]);
 
   // Llegó un mensaje nuevo de Nuna: en modo voz lo lee y después escucha la respuesta.
   useEffect(() => {
@@ -167,7 +330,7 @@ export function InterviewChat({ messages, open, lang = "es-MX" }: { messages: Me
     spokenRef.current = lastNuna;
     if (!voiceModeRef.current) return;
     const fresh = messages.slice(from + 1).filter((m) => m.role !== "owner");
-    speak(fresh.map((m) => m.content).join(" "), () => {
+    speak(fresh, () => {
       if (voiceModeRef.current && open) listen(true);
     });
   }, [lastNuna, messages, open, speak, listen]);
@@ -180,19 +343,37 @@ export function InterviewChat({ messages, open, lang = "es-MX" }: { messages: Me
     try {
       localStorage.setItem(VOICE_KEY, next ? "1" : "0");
     } catch {}
-    if (!next) {
-      stopListening();
-      window.speechSynthesis.cancel();
-      setSpeaking(false);
+    if (!next) return stopAll();
+    unlockAudio();
+    const last = messages.filter((m) => m.role !== "owner").at(-1);
+    const then = () => {
+      if (voiceModeRef.current && open) listen(true);
+    };
+    if (last) speak([last], then);
+    else then();
+  }
+
+  function onMic() {
+    if (listening) {
+      recorderRef.current?.stop();
+      recRef.current?.stop();
       return;
     }
-    // Se activa con un toque: es el momento en que el navegador deja hablar y usar el micrófono.
-    const last = messages.filter((m) => m.role !== "owner").at(-1);
-    if (last) speak(last.content, () => voiceModeRef.current && open && listen(true));
-    else if (open) listen(true);
+    unlockAudio();
+    setHint(null);
+    listen(voiceMode);
   }
 
   const voiceReady = support.listen && support.speak;
+  const status = speaking
+    ? "Nuna está hablando…"
+    : listening
+      ? "Te escucho… cuando termines, haz una pausa."
+      : transcribing
+        ? "Nuna está entendiendo lo que dijiste…"
+        : voiceMode
+          ? "Nuna te lee cada pregunta y escucha tu respuesta."
+          : "Nuna te lee las preguntas y tú contestas hablando.";
 
   return (
     <div className="flex flex-col gap-3">
@@ -235,19 +416,16 @@ export function InterviewChat({ messages, open, lang = "es-MX" }: { messages: Me
             {voiceMode ? "Conversando por voz" : "Conversar por voz"}
           </button>
           <span className="text-sm text-muted" role="status">
-            {speaking
-              ? "Nuna está hablando…"
-              : listening
-                ? "Te escucho… habla con calma."
-                : voiceMode
-                  ? "Nuna te lee cada pregunta y escucha tu respuesta."
-                  : "Nuna te lee las preguntas y tú contestas hablando."}
+            {status}
           </span>
           {speaking && (
             <button
               type="button"
               onClick={() => {
-                window.speechSynthesis.cancel();
+                queueRef.current = [];
+                afterSpeakRef.current = null;
+                audioRef.current?.pause();
+                if (canSpeak()) window.speechSynthesis.cancel();
                 setSpeaking(false);
               }}
               className="min-h-9 rounded-full border border-line px-3 text-xs text-muted hover:text-bone"
@@ -262,7 +440,8 @@ export function InterviewChat({ messages, open, lang = "es-MX" }: { messages: Me
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            stopListening();
+            recRef.current?.abort();
+            recorderRef.current?.cancel();
             send(draft);
           }}
           className="flex gap-2"
@@ -270,12 +449,14 @@ export function InterviewChat({ messages, open, lang = "es-MX" }: { messages: Me
           {support.listen && (
             <button
               type="button"
-              onClick={() => (listening ? recRef.current?.stop() : listen(voiceMode))}
+              onClick={onMic}
+              disabled={transcribing}
               aria-pressed={listening}
-              aria-label={listening ? "Dejar de escuchar" : "Responder hablando"}
-              className={`flex size-12 shrink-0 items-center justify-center rounded-full border transition ${
-                listening ? "animate-pulse border-red-500 bg-red-500 text-white" : "border-line text-bone hover:bg-panel"
+              aria-label={listening ? "Terminé de hablar" : "Responder hablando"}
+              className={`relative flex size-12 shrink-0 items-center justify-center rounded-full border transition disabled:opacity-60 ${
+                listening ? "border-red-500 bg-red-500 text-white" : "border-line text-bone hover:bg-panel"
               }`}
+              style={listening ? { boxShadow: `0 0 0 ${3 + level * 10}px rgb(239 68 68 / 0.25)` } : undefined}
             >
               <MicIcon />
             </button>
@@ -288,7 +469,9 @@ export function InterviewChat({ messages, open, lang = "es-MX" }: { messages: Me
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             autoComplete="off"
-            placeholder={listening ? "Te escucho…" : support.listen ? "Escribe o toca el micrófono…" : "Escribe tu respuesta…"}
+            placeholder={
+              listening ? "Te escucho…" : transcribing ? "Escribiendo lo que dijiste…" : support.listen ? "Escribe o toca el micrófono…" : "Escribe tu respuesta…"
+            }
             className="min-h-12 min-w-0 flex-1 rounded-full border border-line bg-panel px-5 placeholder:text-muted/70"
           />
           <Button type="submit" disabled={pending || !draft.trim()}>

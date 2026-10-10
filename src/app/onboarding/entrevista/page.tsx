@@ -3,6 +3,7 @@ import { requireBusiness } from "@/lib/business";
 import { QUESTIONS, describeAnswer, missingQuestions } from "@/lib/interview";
 import { nunaUsesAI } from "@/lib/nuna";
 import { voiceLang } from "@/lib/voice";
+import { aiVoiceEnabled } from "@/lib/voice-ai";
 import { completeMissing, startFix } from "./actions";
 import { InterviewChat } from "./chat";
 import { RestartButton } from "./restart-button";
@@ -48,7 +49,7 @@ export default async function InterviewPage() {
       />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="flex flex-col gap-3">
-          <InterviewChat messages={messages ?? []} open={open} lang={voiceLang(business.country_code)} />
+          <InterviewChat messages={messages ?? []} open={open} lang={voiceLang(business.country_code)} aiVoice={aiVoiceEnabled()} />
           {missing.length > 0 && (
             <form action={completeMissing} className="flex flex-wrap items-center gap-3 rounded-2xl border border-lime/40 bg-lime/10 p-4">
               <p className="flex-1">
