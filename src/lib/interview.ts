@@ -340,6 +340,13 @@ export const CLOSING = (owner: string | null, b: Pick<BusinessRow, "country_code
     vos: "Ya conozco tu negocio y cómo trabajás, ¡gracias por la plática! Ahora viene lo bonito: te voy a mostrar 3 propuestas de marca hechas para vos, y con la que elijás armo tu página web. Si ya tenés logo, fotos o página, ahí mismo me los podés pasar.",
   });
 
+// Preguntas que contestó un mensaje del dueño: "chat|owner,name" (plática libre) o la del paso ("fix:x>y" o "x").
+export function answeredKeysOf(stepKey: string | null): string[] {
+  const s = stepKey ?? "";
+  if (s.startsWith("chat|")) return s.slice(5).split(",").filter(Boolean);
+  return [s.replace(/^fix:/, "").split(">")[0]];
+}
+
 export function questionIndex(key: string | null): number {
   return QUESTIONS.findIndex((q) => q.key === key);
 }

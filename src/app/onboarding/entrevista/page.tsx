@@ -1,6 +1,6 @@
 import { ButtonLink, Card, PageTitle } from "@/components/ui";
 import { requireBusiness } from "@/lib/business";
-import { QUESTIONS, describeAnswer, missingQuestions } from "@/lib/interview";
+import { QUESTIONS, answeredKeysOf, describeAnswer, missingQuestions } from "@/lib/interview";
 import { nunaUsesAI } from "@/lib/nuna";
 import { voiceLang } from "@/lib/voice";
 import { aiVoiceEnabled, realtimeEnabled } from "@/lib/voice-ai";
@@ -27,7 +27,7 @@ export default async function InterviewPage() {
   const answeredKeys = new Set(
     (messages ?? [])
       .filter((m) => m.role === "owner")
-      .map((m) => (m.step_key ?? "").replace(/^fix:/, "").split(">")[0]),
+      .flatMap((m) => answeredKeysOf(m.step_key)),
   );
   const missing = step === "done" ? missingQuestions(business, services ?? [], answeredKeys) : [];
 

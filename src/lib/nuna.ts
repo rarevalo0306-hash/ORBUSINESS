@@ -462,3 +462,111 @@ export async function extractAnswer(key: QuestionKey, answer: string, b: B, prev
     return extractWithRules(key, answer, b);
   }
 }
+
+// ---------- Plática libre: Nuna conversa como una persona y llena todo con lo que escuchó ----------
+// En cada turno lee TODA la plática, saca todos los datos dichos hasta ahora (si el dueño corrigió
+// algo, vale lo último) y decide qué contestar y qué preguntar de lo que falta.
+
+const opt = <T extends z.ZodType>(schema: T) => schema.nullable().catch(null);
+const FactsSchema = z.object({
+  owner_name: opt(z.string()),
+  business_name: opt(z.string()),
+  country: opt(z.string()),
+  city: opt(z.string()),
+  business_type: opt(z.enum(["products", "services", "both"])),
+  industry: opt(z.string()),
+  services: opt(z.array(z.object({ name: z.string(), price: z.number().nullable().catch(null) }))),
+  currency_choice: opt(z.enum(["local", "other", "both"])),
+  hours: opt(z.string()),
+  phone: opt(z.string()),
+  address: opt(z.string()),
+  lead_sources: opt(z.string()),
+  visit_before_quote: opt(z.boolean()),
+  payment_timing: opt(z.enum(["before", "deposit", "after", "at_sale", "credit"])),
+  payment_methods: opt(z.array(z.string())),
+  offers_delivery: opt(z.boolean()),
+  has_recurring_clients: opt(z.boolean()),
+  address_form: opt(z.enum(["tu", "usted", "vos"])),
+  quote_requires_approval: opt(z.boolean()),
+});
+export type Facts = z.infer<typeof FactsSchema>;
+const ChatSchema = z.object({ reply: z.string(), finished: z.boolean().catch(false), facts: FactsSchema.catch(FactsSchema.parse({})) });
+
+// Qué dato de facts llena cada pregunta (en forma de respuesta, para reusar las mismas validaciones).
+export function factAnswer(key: QuestionKey, f: Facts): Answer | null {
+  const base: Answer = {
+    understood: true, reply: "", text_value: null, bool_value: null, business_type: null, country: null, payment_timing: null,
+    currency_choice: null, payment_methods: null, address_form: null, business_name: null, services: null, corrects_previous: null,
+  };
+  const text = (v: string | null) => (v?.trim() ? { ...base, text_value: v.trim() } : null);
+  const bool = (v: boolean | null) => (v === null ? null : { ...base, bool_value: v });
+  switch (key) {
+    case "owner": return text(f.owner_name);
+    case "name": return text(f.business_name);
+    case "location": return f.city?.trim() || f.country?.trim() ? { ...base, text_value: f.city?.trim() || null, country: f.country?.trim() || null } : null;
+    case "business_type": return f.business_type ? { ...base, business_type: f.business_type } : null;
+    case "industry": return text(f.industry);
+    case "offerings": return f.services?.length ? { ...base, services: f.services } : null;
+    case "currencies": return f.currency_choice ? { ...base, currency_choice: f.currency_choice } : null;
+    case "hours": return text(f.hours);
+    case "phone": return text(f.phone);
+    case "address": return text(f.address);
+    case "lead_sources": return text(f.lead_sources);
+    case "visit_before_quote": return bool(f.visit_before_quote);
+    case "payment_timing": return f.payment_timing ? { ...base, payment_timing: f.payment_timing } : null;
+    case "payment_methods": return f.payment_methods?.length ? { ...base, payment_methods: f.payment_methods } : null;
+    case "offers_delivery": return bool(f.offers_delivery);
+    case "has_recurring_clients": return bool(f.has_recurring_clients);
+    case "address_form": return f.address_form ? { ...base, address_form: f.address_form } : null;
+    case "quote_requires_approval": return bool(f.quote_requires_approval);
+  }
+}
+
+// Convierte una respuesta de la plática en cambios validados (mismas reglas que la entrevista por pasos).
+export function factExtraction(key: QuestionKey, answer: Answer, b: B): Extraction {
+  return extractMain(key, answer, b);
+}
+
+export async function converse(opts: {
+  b: B & Partial<Pick<BusinessRow, "zone" | "hours" | "phone">>;
+  history: { role: string; content: string }[];
+  known: string[]; // lo que ya está guardado, en texto
+  missing: { label: string; hint: string; ask: string }[];
+}): Promise<{ reply: string; finished: boolean; facts: Facts } | null> {
+  const form = { tu: "tú", usted: "usted", vos: "vos" }[ownerForm(opts.b)];
+  const market = marketContext(marketFor(opts.b.country_code));
+  const out = await aiJson({
+    system:
+      "Eres Nuna, la asistente de Orbusiness, platicando con el dueño de un negocio pequeño como lo haría una persona de verdad: cálida, segura, con buen humor, " +
+      "que escucha y se interesa por lo que le cuentan. " +
+      `Qué hace Orbusiness: ${ORBUSINESS_PITCH} ` +
+      "Cómo platicas: reacciona a lo que te dice (con algo concreto de lo que contó, no frases genéricas), y luego pregunta UNA cosa a la vez de lo que falta, " +
+      "en un orden natural (primero quién es y su negocio, luego qué vende y dónde, luego cómo trabaja y cobra). " +
+      "Si te da varios datos juntos, apúntalos todos y no los vuelvas a preguntar. Si algo no quedó claro o parece mal escuchado (nombres raros, palabras cortadas), " +
+      "pregunta para confirmar en vez de suponer. Si te corrige, acéptalo con naturalidad y usa lo nuevo. Si te pregunta algo, contéstale breve y sigue. " +
+      "Si pregunta precios, no inventes cifras: dile que al final le muestras los planes. " +
+      "Mensajes cortos (máximo 3 oraciones), en español natural del país, como en WhatsApp; nada de listas ni de sonar a formulario. Nunca inventes datos. " +
+      `Háblale de ${form}. ${market ?? ""} ` +
+      "facts: TODOS los datos que el dueño ha dicho en TODA la plática (si cambió algo, lo último que dijo); lo que no ha dicho va en null. " +
+      "business_name es el nombre del negocio tal cual (puede estar en inglés). services: productos o categorías y/o servicios con precio solo si lo dijo. " +
+      "finished: true solo cuando ya no falta ningún dato; entonces reply es un cierre cálido y breve, sin preguntas.",
+    user: [
+      `Lo que ya está guardado: ${opts.known.join("; ") || "nada todavía"}.`,
+      opts.missing.length
+        ? `Lo que todavía falta saber (pregúntalo con tus palabras; esta es la forma sugerida):\n${opts.missing.map((m) => `- ${m.label}: ${m.ask} (dato: ${m.hint})`).join("\n")}`
+        : "Ya no falta nada: cierra la plática.",
+      "",
+      "Plática hasta ahora:",
+      ...opts.history.map((m) => `${m.role === "owner" ? "Dueño" : "Nuna"}: ${m.content}`),
+    ].join("\n"),
+    schema: ChatSchema,
+    jsonHint:
+      'Formato: {"reply": "lo que le dices", "finished": false, "facts": {"owner_name": null, "business_name": null, "country": null, "city": null, ' +
+      '"business_type": "products|services|both|null", "industry": null, "services": [{"name": "...", "price": null}], "currency_choice": "local|other|both|null", ' +
+      '"hours": null, "phone": null, "address": null, "lead_sources": null, "visit_before_quote": null, "payment_timing": "before|deposit|after|at_sale|credit|null", ' +
+      '"payment_methods": ["..."], "offers_delivery": null, "has_recurring_clients": null, "address_form": "tu|usted|vos|null", "quote_requires_approval": null}}',
+    maxTokens: 2500,
+    temperature: 0.7,
+  });
+  return out ? { reply: out.reply.trim(), finished: out.finished, facts: out.facts } : null;
+}

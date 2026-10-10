@@ -5,15 +5,17 @@ import { requireBusiness } from "@/lib/business";
 import {
   CLOSING,
   QUESTIONS,
+  answeredKeysOf,
   describeAnswer,
   industryFromName,
   missingQuestions,
   questionFor,
+  type BusinessPatch,
   type BusinessRow,
   type Extraction,
   type QuestionKey,
 } from "@/lib/interview";
-import { extractAnswer } from "@/lib/nuna";
+import { converse, extractAnswer, factAnswer, factExtraction, nunaUsesAI } from "@/lib/nuna";
 import type { createClient } from "@/lib/supabase/server";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
@@ -83,9 +85,15 @@ export async function answerInterview(text: string) {
   const { supabase, user, business } = await requireBusiness();
 
   const step = await currentStep(supabase, business.id);
-  const { key, fixing } = parseStep(step);
-  const q = questionFor(key);
-  if (!q) return; // entrevista terminada
+  if (step === "done") return; // entrevista terminada
+  // Con IA, Nuna platica libremente y llena todo con lo que escuchó; si la IA falla, sigue por pasos.
+  if (nunaUsesAI() && (await chatTurn(supabase, user.id, business, answer))) return;
+
+  const parsed = parseStep(step);
+  const fixing = parsed.fixing;
+  const q = questionFor(parsed.key) ?? (await missingFor(supabase, business))[0] ?? null;
+  if (!q) return;
+  const key = q.key;
 
   // La respuesta anterior y lo que Nuna anotó: si el dueño dice "no, así no es", se corrige eso.
   const previous = fixing ? undefined : await previousAnswer(supabase, business, key);
@@ -163,12 +171,101 @@ async function previousAnswer(supabase: Supabase, b: BusinessRow, currentKey: st
   return { key: prevQ.key, understood: describeAnswer(prevQ.key, b, services ?? [], true) };
 }
 
+// Un turno de la plática libre. Devuelve false si la IA no respondió (para seguir por pasos).
+async function chatTurn(supabase: Supabase, userId: string, business: BusinessRow, answer: string): Promise<boolean> {
+  const [{ data: history }, { data: services }, missing] = await Promise.all([
+    supabase.from("interview_messages").select("role, content").eq("business_id", business.id).order("created_at"),
+    supabase.from("services").select("name, price").eq("business_id", business.id).order("sort"),
+    missingFor(supabase, business),
+  ]);
+  const known = QUESTIONS.map((q) => [q.label, describeAnswer(q.key, business, services ?? [], true)] as const)
+    .filter(([, v]) => v)
+    .map(([l, v]) => `${l}: ${v}`);
+  const ask = (q: (typeof QUESTIONS)[number], b: BusinessRow) => (q.key === "owner" ? "¿Cómo te llamas?" : q.text(b));
+  const out = await converse({
+    b: business,
+    history: [...(history ?? []), { role: "owner", content: answer }],
+    known,
+    missing: missing.map((q) => ({ label: q.label, hint: q.hint(business), ask: ask(q, business) })),
+  });
+  if (!out) return false;
+
+  // Llena todo lo que se dijo en la plática (con las mismas validaciones de siempre), en orden:
+  // el país va antes que el teléfono y la moneda.
+  let b = business;
+  const patch: BusinessPatch = {};
+  const filled: QuestionKey[] = [];
+  let newServices: { name: string; price: number | null }[] | null = null;
+  for (const q of QUESTIONS) {
+    const fact = factAnswer(q.key, out.facts);
+    if (!fact) continue;
+    const ex = factExtraction(q.key, fact, b);
+    if (!ex.ok) continue;
+    filled.push(q.key);
+    const changed = Object.entries(ex.patch).filter(([k, v]) => JSON.stringify(b[k as keyof BusinessRow]) !== JSON.stringify(v));
+    if (changed.length) {
+      Object.assign(patch, Object.fromEntries(changed));
+      b = { ...b, ...Object.fromEntries(changed) };
+    }
+    if (ex.services && JSON.stringify(ex.services) !== JSON.stringify((services ?? []).map((s) => ({ name: s.name, price: s.price === null ? null : Number(s.price) })))) {
+      newServices = ex.services;
+    }
+  }
+  if (patch.name && !b.industry) {
+    const industry = industryFromName(String(patch.name));
+    if (industry) {
+      patch.industry = industry;
+      b = { ...b, industry };
+    }
+  }
+
+  let updated = business;
+  if (Object.keys(patch).length) {
+    const { data, error } = await supabase.from("businesses").update(patch).eq("id", business.id).select("*").single();
+    if (error) throw new Error(error.message);
+    updated = data;
+  }
+  if (newServices) {
+    await supabase.from("services").delete().eq("business_id", business.id);
+    const { error } = await supabase
+      .from("services")
+      .insert(newServices.map((s, i) => ({ business_id: business.id, name: s.name, price: s.price, sort: i })));
+    if (error) throw new Error(error.message);
+  }
+  await supabase.from("interview_messages").insert({ business_id: business.id, role: "owner", step_key: `chat|${filled.join(",")}`, content: answer });
+  if (Object.keys(patch).length || newServices) {
+    await supabase.from("audit_log").insert({
+      business_id: business.id,
+      actor: "nuna",
+      actor_user_id: userId,
+      action: "interview.chat_saved",
+      data: { patch, services: newServices } as never,
+    });
+  }
+
+  const still = await missingFor(supabase, updated);
+  if (!still.length) {
+    if (updated.onboarding_step === "interview") {
+      await nuna(supabase, business.id, "done", CLOSING(updated.owner_name, updated));
+      await supabase.from("businesses").update({ onboarding_step: "brand" }).eq("id", business.id);
+    } else {
+      await nuna(supabase, business.id, "done", `${out.reply} Listo, ya quedó todo actualizado.`);
+    }
+  } else {
+    // Si la IA cerró antes de tiempo, Nuna sigue con lo que falta.
+    const reply = out.finished || !out.reply.includes("?") ? `${out.reply} ${ask(still[0], updated)}` : out.reply;
+    await nuna(supabase, business.id, "chat", reply.trim());
+  }
+  revalidatePath("/onboarding", "layout");
+  return true;
+}
+
 async function missingFor(supabase: Supabase, b: BusinessRow) {
   const [{ data: services }, { data: answered }] = await Promise.all([
     supabase.from("services").select("name, price").eq("business_id", b.id),
     supabase.from("interview_messages").select("step_key").eq("business_id", b.id).eq("role", "owner"),
   ]);
-  const keys = new Set((answered ?? []).map((m) => parseStep(m.step_key ?? "").key));
+  const keys = new Set((answered ?? []).flatMap((m) => answeredKeysOf(m.step_key)));
   return missingQuestions(b, services ?? [], keys);
 }
 
