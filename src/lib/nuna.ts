@@ -57,6 +57,10 @@ const AnswerSchema = z.object({
   payment_methods: z.array(z.string()).nullable().describe("Formas de pago con su nombre local"),
   address_form: z.enum(["tu", "usted", "vos"]).nullable(),
   business_name: z.string().nullable().describe("Nombre del negocio si el dueño lo menciona de paso; si no, null"),
+  corrects_previous: z
+    .boolean()
+    .nullable()
+    .describe("true si en vez de contestar está corrigiendo lo que anotaste en la pregunta anterior"),
   services: z
     .array(z.object({ name: z.string(), price: z.number().nullable() }))
     .nullable()
@@ -84,7 +88,10 @@ const SYSTEM =
   "Si el dueño dice varias opciones (por ejemplo, 'los tres'), elige la más común y no repreguntes. " +
   "En reply no digas que anotaste datos distintos del que se pidió (excepto el nombre del negocio).";
 
-function userPrompt(key: QuestionKey, answer: string, b: B) {
+// La pregunta anterior y lo que Nuna anotó, para darse cuenta cuando el dueño la corrige.
+export type PreviousAnswer = { key: QuestionKey; understood: string | null };
+
+function userPrompt(key: QuestionKey, answer: string, b: B, previous?: PreviousAnswer) {
   const q = questionFor(key)!;
   const kind = { products: "tienda (vende productos)", services: "servicios", both: "productos y servicios" }[b.business_type ?? ""];
   const market = marketContext(marketFor(b.country_code));
@@ -99,7 +106,12 @@ function userPrompt(key: QuestionKey, answer: string, b: B) {
     `${known.length ? `Lo que ya sabes del negocio (úsalo, no lo vuelvas a preguntar): ${known.join("; ")}.\n` : ""}` +
     `${market ? `${market}\n` : ""}` +
     `${kind ? `Tipo de negocio: ${kind}.\n` : ""}` +
-    `Pregunta (${key}): ${q.text(b)}\nQué hay que extraer: ${q.hint(b)}\n\nRespuesta del dueño:\n${answer}`
+    (previous
+      ? `Pregunta anterior (${previous.key}): ${questionFor(previous.key)!.text(b)}\nLo que anotaste: ${previous.understood ?? "nada"}.\n` +
+        "Si el dueño, en vez de contestar la pregunta actual, te corrige o aclara lo anterior (por ejemplo 'no, me llamo…', 'eso no es así', 'te equivocaste', 'no entendiste'), " +
+        "marca corrects_previous=true y understood=false.\n"
+      : "") +
+    `Pregunta actual (${key}): ${q.text(b)}\nQué hay que extraer: ${q.hint(b)}\n\nRespuesta del dueño:\n${answer}`
   );
 }
 
@@ -128,6 +140,7 @@ function toExtraction(key: QuestionKey, out: Answer, b: B): Extraction {
 }
 
 function extractMain(key: QuestionKey, out: Answer, b: B): Extraction {
+  if (out.corrects_previous) return { ok: false, ack: out.reply, correctsPrevious: true };
   if (!out.understood) return { ok: false, ack: out.reply };
 
   const patch: BusinessPatch = {};
@@ -221,19 +234,20 @@ const ANSWER_HINT =
   'business_type ("products", "services", "both" o null), country (string o null), ' +
   'payment_timing ("before", "deposit", "after", "at_sale", "credit" o null), services (lista de {"name", "price"} donde price es número o null, o null), ' +
   'currency_choice ("local", "other", "both" o null), payment_methods (lista de textos o null), address_form ("tu", "usted", "vos" o null), business_name (string o null). ' +
+  "corrects_previous (boolean o null). " +
   `Ejemplo de json: ${JSON_EXAMPLE}`;
 
 // DeepSeek a veces devuelve vacío: se reintenta una vez antes de caer a las reglas.
-async function askDeepSeek(key: QuestionKey, answer: string, b: B): Promise<Answer> {
+async function askDeepSeek(key: QuestionKey, answer: string, b: B, previous?: PreviousAnswer): Promise<Answer> {
   try {
-    return await askDeepSeekOnce(key, answer, b);
+    return await askDeepSeekOnce(key, answer, b, previous);
   } catch (error) {
     console.warn("Nuna (deepseek) reintenta:", error);
-    return askDeepSeekOnce(key, answer, b);
+    return askDeepSeekOnce(key, answer, b, previous);
   }
 }
 
-async function askDeepSeekOnce(key: QuestionKey, answer: string, b: B): Promise<Answer> {
+async function askDeepSeekOnce(key: QuestionKey, answer: string, b: B, previous?: PreviousAnswer): Promise<Answer> {
   const response = await deepseekFetch(
     {
       model: process.env.DEEPSEEK_MODEL || "deepseek-flash",
@@ -245,7 +259,7 @@ async function askDeepSeekOnce(key: QuestionKey, answer: string, b: B): Promise<
           role: "system",
           content: `${SYSTEM}\n\nResponde solo con un objeto json con estas claves: ${ANSWER_HINT}`,
         },
-        { role: "user", content: userPrompt(key, answer, b) },
+        { role: "user", content: userPrompt(key, answer, b, previous) },
       ],
     },
     30_000,
@@ -262,14 +276,14 @@ async function askDeepSeekOnce(key: QuestionKey, answer: string, b: B): Promise<
 
 let anthropicClient: Anthropic | null = null;
 
-async function askClaude(key: QuestionKey, answer: string, b: B): Promise<Answer> {
+async function askClaude(key: QuestionKey, answer: string, b: B, previous?: PreviousAnswer): Promise<Answer> {
   anthropicClient ??= new Anthropic();
   const response = await anthropicClient.messages.parse({
     model: process.env.ANTHROPIC_MODEL || "claude-opus-5-5",
     max_tokens: 2000,
     output_config: { effort: "low", format: zodOutputFormat(AnswerSchema) },
     system: SYSTEM,
-    messages: [{ role: "user", content: userPrompt(key, answer, b) }],
+    messages: [{ role: "user", content: userPrompt(key, answer, b, previous) }],
   });
   if (!response.parsed_output) throw new Error("Claude no devolvió una respuesta válida");
   return response.parsed_output;
@@ -422,24 +436,24 @@ export async function aiJson<T>(opts: {
   }
 }
 
-async function askOpenAI(key: QuestionKey, answer: string, b: B): Promise<Answer> {
-  const out = await aiJson({ system: SYSTEM, user: userPrompt(key, answer, b), schema: AnswerSchema, jsonHint: `Claves: ${ANSWER_HINT}`, maxTokens: 2000, provider: "openai" });
+async function askOpenAI(key: QuestionKey, answer: string, b: B, previous?: PreviousAnswer): Promise<Answer> {
+  const out = await aiJson({ system: SYSTEM, user: userPrompt(key, answer, b, previous), schema: AnswerSchema, jsonHint: `Claves: ${ANSWER_HINT}`, maxTokens: 2000, provider: "openai" });
   if (!out) throw new Error("OpenAI no devolvió una respuesta válida");
   return out;
 }
 
 // ---------- Punto de entrada ----------
 
-export async function extractAnswer(key: QuestionKey, answer: string, b: B): Promise<Extraction> {
+export async function extractAnswer(key: QuestionKey, answer: string, b: B, previous?: PreviousAnswer): Promise<Extraction> {
   const provider = nunaProvider();
   if (provider === "rules") return extractWithRules(key, answer, b);
   try {
     const out =
       provider === "deepseek"
-        ? await askDeepSeek(key, answer, b)
+        ? await askDeepSeek(key, answer, b, previous)
         : provider === "openai"
-          ? await askOpenAI(key, answer, b)
-          : await askClaude(key, answer, b);
+          ? await askOpenAI(key, answer, b, previous)
+          : await askClaude(key, answer, b, previous);
     const result = toExtraction(key, out, b);
     return result.ok ? { ...result, ack: withoutQuestions(result.ack) } : result;
   } catch (error) {

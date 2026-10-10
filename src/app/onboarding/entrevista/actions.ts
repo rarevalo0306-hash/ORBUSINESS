@@ -5,6 +5,7 @@ import { requireBusiness } from "@/lib/business";
 import {
   CLOSING,
   QUESTIONS,
+  describeAnswer,
   industryFromName,
   missingQuestions,
   questionFor,
@@ -86,8 +87,23 @@ export async function answerInterview(text: string) {
   const q = questionFor(key);
   if (!q) return; // entrevista terminada
 
+  // La respuesta anterior y lo que Nuna anotó: si el dueño dice "no, así no es", se corrige eso.
+  const previous = fixing ? undefined : await previousAnswer(supabase, business, key);
   await supabase.from("interview_messages").insert({ business_id: business.id, role: "owner", step_key: step, content: answer });
-  const result = await extractAnswer(q.key, answer, business);
+  const result = await extractAnswer(q.key, answer, business, previous);
+  if (!result.ok && result.correctsPrevious && previous) {
+    const prevQ = questionFor(previous.key)!;
+    const fix = await extractAnswer(prevQ.key, answer, business);
+    if (fix.ok) {
+      const updated = await saveExtraction(supabase, business, user.id, prevQ.key, fix);
+      await nuna(supabase, business.id, step, `${fix.ack} Gracias por corregirme. ${q.text(updated)}`);
+    } else {
+      // No quedó claro el dato corregido: lo pregunta de nuevo y después vuelve a donde iba.
+      await nuna(supabase, business.id, `fix:${prevQ.key}>${step}`, `Perdón, corrijamos eso. ${prevQ.text(business)}`);
+    }
+    revalidatePath("/onboarding", "layout");
+    return;
+  }
   if (!result.ok) {
     if (result.patch && Object.keys(result.patch).length) {
       await supabase.from("businesses").update(result.patch).eq("id", business.id);
@@ -127,6 +143,24 @@ export async function answerInterview(text: string) {
     await nuna(supabase, business.id, "done", `${result.ack} Listo, ya quedó todo actualizado.`);
   }
   revalidatePath("/onboarding", "layout");
+}
+
+// La última pregunta YA contestada antes de la actual (se saltan los intentos fallidos de la actual).
+async function previousAnswer(supabase: Supabase, b: BusinessRow, currentKey: string) {
+  const [{ data: recent }, { data: services }] = await Promise.all([
+    supabase
+      .from("interview_messages")
+      .select("step_key")
+      .eq("business_id", b.id)
+      .eq("role", "owner")
+      .order("created_at", { ascending: false })
+      .limit(10),
+    supabase.from("services").select("name, price").eq("business_id", b.id),
+  ]);
+  const prevKey = (recent ?? []).map((m) => parseStep(m.step_key ?? "").key).find((k) => k !== currentKey);
+  const prevQ = questionFor(prevKey ?? null);
+  if (!prevQ) return undefined;
+  return { key: prevQ.key, understood: describeAnswer(prevQ.key, b, services ?? [], true) };
 }
 
 async function missingFor(supabase: Supabase, b: BusinessRow) {

@@ -601,7 +601,7 @@ export function describeAnswer(key: QuestionKey, b: BusinessRow, services: Servi
 // patch en un resultado fallido = datos extra que el dueño dijo de paso (por ejemplo, el nombre).
 export type Extraction =
   | { ok: true; ack: string; patch: BusinessPatch; services?: ServiceInput[] }
-  | { ok: false; ack: string; patch?: BusinessPatch };
+  | { ok: false; ack: string; patch?: BusinessPatch; correctsPrevious?: boolean };
 
 export function extractWithRules(key: QuestionKey, raw: string, b: B): Extraction {
   let text = raw.trim();

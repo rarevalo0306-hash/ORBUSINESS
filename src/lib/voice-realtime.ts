@@ -20,6 +20,13 @@ export class RealtimeVoice {
   private queue: string[] = [];
   private closed = false;
   private watchdog: ReturnType<typeof setTimeout> | null = null;
+  private responseId: string | null = null;
+  private saying = ""; // lo que Nuna está diciendo (para no tomar su propio eco como respuesta)
+  // Lo que dice el dueño llega en pedazos si hace pausas: se juntan y se manda todo junto.
+  private heard: string[] = [];
+  private userTalking = false;
+  private segmentsPending = 0;
+  private merge: ReturnType<typeof setTimeout> | null = null;
   speaking = false;
 
   constructor(private events: RealtimeEvents = {}) {}
@@ -75,12 +82,11 @@ export class RealtimeVoice {
   // Calla a Nuna (por ejemplo, si el dueño la interrumpe con el botón).
   stopSpeaking() {
     this.queue = [];
-    this.send({ type: "response.cancel" });
+    this.send(this.responseId ? { type: "response.cancel", response_id: this.responseId } : { type: "response.cancel" });
     this.send({ type: "output_audio_buffer.clear" });
     if (this.watchdog) clearTimeout(this.watchdog);
     this.watchdog = null;
     this.speaking = false;
-    this.setMic(true);
     this.events.onSpeaking?.(false);
   }
 
@@ -88,6 +94,7 @@ export class RealtimeVoice {
     if (this.closed) return;
     this.closed = true;
     if (this.watchdog) clearTimeout(this.watchdog);
+    if (this.merge) clearTimeout(this.merge);
     this.dc?.close();
     this.pc?.close();
     this.mic?.getTracks().forEach((t) => t.stop());
@@ -104,12 +111,28 @@ export class RealtimeVoice {
     this.speaking = false;
     this.events.onSpeaking?.(this.queue.length > 0);
     this.flush();
-    if (!this.speaking) this.setMic(true);
   }
 
-  // Mientras Nuna habla, el micrófono se apaga: así no se escucha a sí misma por el altavoz.
-  private setMic(on: boolean) {
-    this.mic?.getAudioTracks().forEach((t) => (t.enabled = on));
+  // Manda lo que dijo el dueño cuando termina de verdad: sin hablar 1.2 s y sin pedazos por transcribir.
+  private scheduleHeard() {
+    if (this.merge) clearTimeout(this.merge);
+    if (this.userTalking || (!this.heard.length && !this.segmentsPending)) return;
+    // Si un pedazo nunca llega a transcribirse, no se queda esperando para siempre.
+    const wait = this.segmentsPending > 0 ? 4000 : 1200;
+    this.merge = setTimeout(() => {
+      this.segmentsPending = 0;
+      const text = this.heard.join(" ").replace(/\s+/g, " ").trim();
+      this.heard = [];
+      if (text) this.events.onTranscript?.(text);
+    }, wait);
+  }
+
+  // ¿Es su propia voz que se coló por el altavoz?
+  private isEcho(text: string) {
+    const words = (t: string) => t.toLowerCase().normalize("NFD").replace(/[^a-z0-9ñ\s]/g, "").split(/\s+/).filter(Boolean);
+    const said = new Set(words(this.saying));
+    const heard = words(text);
+    return heard.length > 0 && said.size > 0 && heard.filter((w) => said.has(w)).length / heard.length >= 0.8;
   }
 
   private send(event: Record<string, unknown>) {
@@ -122,7 +145,7 @@ export class RealtimeVoice {
     const text = this.queue.shift();
     if (!text) return;
     this.speaking = true;
-    this.setMic(false);
+    this.saying = text;
     this.events.onSpeaking?.(true);
     // Seguro: si el audio no empieza en 10 s, se da por terminado y se sigue escuchando.
     this.watchdog = setTimeout(() => this.doneSpeaking(), 10_000);
@@ -139,7 +162,7 @@ export class RealtimeVoice {
   }
 
   private handle(raw: string) {
-    let event: { type?: string; transcript?: string; error?: { message?: string } };
+    let event: { type?: string; transcript?: string; response?: { id?: string; status?: string }; error?: { message?: string } };
     try {
       event = JSON.parse(raw);
     } catch {
@@ -147,13 +170,31 @@ export class RealtimeVoice {
     }
     switch (event.type) {
       case "input_audio_buffer.speech_started":
+        // El dueño habla: si Nuna estaba hablando, se calla para escucharlo.
+        this.userTalking = true;
+        if (this.merge) clearTimeout(this.merge);
+        if (this.speaking) this.stopSpeaking();
         this.events.onListening?.(true);
         break;
       case "input_audio_buffer.speech_stopped":
+        this.userTalking = false;
+        this.segmentsPending++;
+        this.scheduleHeard();
         this.events.onListening?.(false);
         break;
-      case "conversation.item.input_audio_transcription.completed":
-        if (event.transcript?.trim()) this.events.onTranscript?.(event.transcript.trim());
+      case "conversation.item.input_audio_transcription.completed": {
+        this.segmentsPending = Math.max(0, this.segmentsPending - 1);
+        const text = event.transcript?.trim();
+        if (text && !this.isEcho(text)) this.heard.push(text);
+        this.scheduleHeard();
+        break;
+      }
+      case "conversation.item.input_audio_transcription.failed":
+        this.segmentsPending = Math.max(0, this.segmentsPending - 1);
+        this.scheduleHeard();
+        break;
+      case "response.created":
+        this.responseId = event.response?.id ?? null;
         break;
       case "output_audio_buffer.started":
         if (this.watchdog) clearTimeout(this.watchdog);
@@ -165,7 +206,7 @@ export class RealtimeVoice {
         break;
       case "response.done": {
         // Si la respuesta falló o no trajo audio, no se queda esperando.
-        const status = (event as { response?: { status?: string } }).response?.status;
+        const status = event.response?.status;
         if (status && status !== "completed" && this.speaking) this.doneSpeaking();
         break;
       }

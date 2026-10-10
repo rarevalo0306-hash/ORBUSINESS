@@ -86,7 +86,7 @@ export async function transcribe(audio: Blob, filename: string, prompt: string):
 
 const REALTIME_MODEL = () => process.env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime-2.1";
 const REALTIME_VOICE = () => process.env.OPENAI_REALTIME_VOICE?.trim() || TTS_VOICE();
-const REALTIME_TRANSCRIBE = () => process.env.OPENAI_REALTIME_TRANSCRIBE?.trim() || "gpt-4o-mini-transcribe";
+const REALTIME_TRANSCRIBE = () => process.env.OPENAI_REALTIME_TRANSCRIBE?.trim() || "gpt-4o-transcribe";
 export const realtimeEnabled = () => aiVoiceEnabled() && process.env.OPENAI_REALTIME !== "off";
 
 function realtimeInstructions(country: string | null) {
