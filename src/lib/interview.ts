@@ -32,6 +32,15 @@ export type QuestionKey =
 
 type B = Pick<BusinessRow, "business_type" | "country_code"> & Partial<Pick<BusinessRow, "industry">>;
 
+// Lo que Orbusiness hace y vende: Nuna lo sabe para explicar la entrevista y contestar dudas.
+export const ORBUSINESS_PITCH =
+  "Orbusiness le arma todo a negocios pequeños, sin que el dueño tenga que configurar nada: " +
+  "1) su identidad de marca (logo, colores, manual, piezas para redes y papelería); " +
+  "2) su página web lista para celular, con un formulario que manda los clientes interesados directo al CRM; " +
+  "3) un CRM a la medida de cómo trabaja (clientes, cotizaciones, seguimiento); " +
+  "4) Nuna como asistente: responde a los clientes por WhatsApp, manda cotizaciones, da seguimiento, agenda y ayuda a cobrar. " +
+  "La entrevista sirve para conocer al dueño y su negocio y armar todo eso con sus datos reales; dura unos 5 minutos.";
+
 // Trato con el dueño durante la entrevista: el habitual de su país (antes de saber el país, tú).
 export function ownerForm(b: Pick<BusinessRow, "country_code">): AddressForm {
   return marketFor(b.country_code)?.addressForm ?? "tu";
@@ -88,21 +97,25 @@ export type Question = {
 
 export const QUESTIONS: Question[] = [
   {
-    key: "name",
-    label: "Negocio",
-    text: () => "¡Hola! Soy Nuna, de Orbusiness. Tú cuéntame de tu negocio y yo armo todo. ¿Cómo se llama tu negocio?",
-    hint: () => "Solo el nombre comercial del negocio, sin saludos ni frases (por ejemplo: Ferretería El Martillo).",
-  },
-  {
     key: "owner",
     label: "Dueño",
-    text: () => "¿Y tú cómo te llamas?",
-    hint: () => "El nombre de pila del dueño o representante.",
+    text: () =>
+      "¡Hola! ¿Cómo estás? Soy Nuna, tu asistente en Orbusiness, y estoy aquí para conocerte a ti y a tu negocio. " +
+      "Con lo que me cuentes te armo todo: tu marca, tu página web y un sistema para atender a tus clientes. " +
+      "Y después me quedo contigo: les respondo por WhatsApp, mando cotizaciones y les doy seguimiento, para que tú te enfoques en tu negocio. " +
+      "Es una plática de unos 5 minutos y puedes escribirme o hablarme. Para empezar, ¿cómo te llamas?",
+    hint: () => "El nombre de pila del dueño o representante (puede venir con saludo, por ejemplo 'bien, gracias, soy Ricardo').",
+  },
+  {
+    key: "name",
+    label: "Negocio",
+    text: () => "¿Y cómo se llama tu negocio?",
+    hint: () => "Solo el nombre comercial del negocio, sin saludos ni frases (por ejemplo: Ferretería El Martillo).",
   },
   {
     key: "location",
     label: "Ubicación",
-    text: () => "¿En qué país y ciudad está tu negocio?",
+    text: () => "¿En qué país y ciudad está tu negocio? Así uso la moneda y la forma de hablar de allá con tus clientes.",
     hint: () => "text_value = ciudad o zona; country = nombre del país en español.",
   },
   {
@@ -119,7 +132,7 @@ export const QUESTIONS: Question[] = [
   {
     key: "industry",
     label: "A qué se dedica",
-    text: () => "¿A qué se dedica el negocio? Por ejemplo: ferretería, salón de belleza, jardinería, taller mecánico.",
+    text: () => "¿A qué se dedica el negocio? Por ejemplo: ferretería, salón de belleza, jardinería, taller mecánico. Con esto diseño tu marca y tu página.",
     hint: () => "El giro en pocas palabras.",
   },
   {
@@ -130,20 +143,20 @@ export const QUESTIONS: Question[] = [
       const example = ex ? ` Por ejemplo: ${ex}.` : "";
       if (b.business_type === "products")
         return t3(b, {
-          tu: `¿Qué tipo de productos vendes?${example} Si quieres, dime el precio de los más pedidos.`,
-          usted: `¿Qué tipo de productos vende?${example} Si quiere, dígame el precio de los más pedidos.`,
-          vos: `¿Qué tipo de productos vendés?${example} Si querés, decime el precio de los más pedidos.`,
+          tu: `¿Qué tipo de productos vendes?${example} Esto va a tu página web; si quieres, dime el precio de los más pedidos.`,
+          usted: `¿Qué tipo de productos vende?${example} Esto va a su página web; si quiere, dígame el precio de los más pedidos.`,
+          vos: `¿Qué tipo de productos vendés?${example} Esto va a tu página web; si querés, decime el precio de los más pedidos.`,
         });
       if (b.business_type === "both")
         return t3(b, {
-          tu: `¿Qué productos y servicios ofreces?${example} Si tienes precios, inclúyelos.`,
-          usted: `¿Qué productos y servicios ofrece?${example} Si tiene precios, inclúyalos.`,
-          vos: `¿Qué productos y servicios ofrecés?${example} Si tenés precios, incluilos.`,
+          tu: `¿Qué productos y servicios ofreces?${example} Esto va a tu página web; si tienes precios, inclúyelos.`,
+          usted: `¿Qué productos y servicios ofrece?${example} Esto va a su página web; si tiene precios, inclúyalos.`,
+          vos: `¿Qué productos y servicios ofrecés?${example} Esto va a tu página web; si tenés precios, incluilos.`,
         });
       return t3(b, {
-        tu: `¿Qué servicios das y cuánto cobras por cada uno?${example}`,
-        usted: `¿Qué servicios da y cuánto cobra por cada uno?${example}`,
-        vos: `¿Qué servicios das y cuánto cobrás por cada uno?${example}`,
+        tu: `¿Qué servicios das y cuánto cobras por cada uno?${example} Con esto armo tu página y tus cotizaciones.`,
+        usted: `¿Qué servicios da y cuánto cobra por cada uno?${example} Con esto armo su página y sus cotizaciones.`,
+        vos: `¿Qué servicios das y cuánto cobrás por cada uno?${example} Con esto armo tu página y tus cotizaciones.`,
       });
     },
     hint: () =>
@@ -172,9 +185,9 @@ export const QUESTIONS: Question[] = [
     label: "Horario",
     text: (b) =>
       t3(b, {
-        tu: "¿Qué días y a qué horas abres o trabajas? Por ejemplo: lunes a sábado de 8 am a 6 pm.",
-        usted: "¿Qué días y a qué horas abre o trabaja? Por ejemplo: lunes a sábado de 8 am a 6 pm.",
-        vos: "¿Qué días y a qué horas abrís o trabajás? Por ejemplo: lunes a sábado de 8 am a 6 pm.",
+        tu: "¿Qué días y a qué horas abres o trabajas? Por ejemplo: lunes a sábado de 8 am a 6 pm. Así lo sabrán tus clientes y yo sabré cuándo atiendes.",
+        usted: "¿Qué días y a qué horas abre o trabaja? Por ejemplo: lunes a sábado de 8 am a 6 pm. Así lo sabrán sus clientes y yo sabré cuándo atiende.",
+        vos: "¿Qué días y a qué horas abrís o trabajás? Por ejemplo: lunes a sábado de 8 am a 6 pm. Así lo sabrán tus clientes y yo sabré cuándo atendés.",
       }),
     hint: () => "Días y horario.",
   },
@@ -259,7 +272,11 @@ export const QUESTIONS: Question[] = [
     label: "Formas de pago",
     text: (b) => {
       const m = marketFor(b.country_code);
-      const ask = t3(b, { tu: "¿Qué formas de pago aceptas?", usted: "¿Qué formas de pago acepta?", vos: "¿Qué formas de pago aceptás?" });
+      const ask = t3(b, {
+        tu: "¿Qué formas de pago aceptas? Lo pongo en tu página y en tus cotizaciones.",
+        usted: "¿Qué formas de pago acepta? Lo pongo en su página y en sus cotizaciones.",
+        vos: "¿Qué formas de pago aceptás? Lo pongo en tu página y en tus cotizaciones.",
+      });
       return `${ask} Por ejemplo: ${(m?.paymentMethods ?? ["Efectivo", "Transferencia", "Tarjeta"]).join(", ")}.`;
     },
     hint: () => "payment_methods = lista de formas de pago que mencionó, con su nombre local (Yape, SINPE Móvil, Nequi, OXXO…).",
@@ -294,9 +311,9 @@ export const QUESTIONS: Question[] = [
     text: (b) => {
       const m = marketFor(b.country_code);
       const ask = t3(b, {
-        tu: "¿Cómo quieres que les hable a tus clientes: de tú, de usted o de vos?",
-        usted: "¿Cómo quiere que les hable a sus clientes: de tú, de usted o de vos?",
-        vos: "¿Cómo querés que les hable a tus clientes: de tú, de usted o de vos?",
+        tu: "Cuando yo atienda a tus clientes por WhatsApp, ¿cómo quieres que les hable: de tú, de usted o de vos?",
+        usted: "Cuando yo atienda a sus clientes por WhatsApp, ¿cómo quiere que les hable: de tú, de usted o de vos?",
+        vos: "Cuando yo atienda a tus clientes por WhatsApp, ¿cómo querés que les hable: de tú, de usted o de vos?",
       });
       return `${ask}${m ? ` En ${m.name} lo más común es ${FORM_NAMES[m.addressForm]}.` : ""}`;
     },
@@ -318,9 +335,9 @@ export const QUESTIONS: Question[] = [
 export const CLOSING = (owner: string | null, b: Pick<BusinessRow, "country_code">) =>
   `Listo${owner ? `, ${owner}` : ""}. ` +
   say(ownerForm(b), {
-    tu: "Ya entendí tu negocio y cómo trabajas. Siguiente paso: si tienes logo, fotos o página web, pásamelos; si no, yo me encargo.",
-    usted: "Ya entendí su negocio y cómo trabaja. Siguiente paso: si tiene logo, fotos o página web, pásemelos; si no, yo me encargo.",
-    vos: "Ya entendí tu negocio y cómo trabajás. Siguiente paso: si tenés logo, fotos o página web, pasámelos; si no, yo me encargo.",
+    tu: "Ya conozco tu negocio y cómo trabajas, ¡gracias por la plática! Ahora viene lo bonito: te voy a mostrar 3 propuestas de marca hechas para ti, y con la que elijas armo tu página web. Si ya tienes logo, fotos o página, ahí mismo me los puedes pasar.",
+    usted: "Ya conozco su negocio y cómo trabaja, ¡gracias por la plática! Ahora viene lo bonito: le voy a mostrar 3 propuestas de marca hechas para usted, y con la que elija armo su página web. Si ya tiene logo, fotos o página, ahí mismo me los puede pasar.",
+    vos: "Ya conozco tu negocio y cómo trabajás, ¡gracias por la plática! Ahora viene lo bonito: te voy a mostrar 3 propuestas de marca hechas para vos, y con la que elijás armo tu página web. Si ya tenés logo, fotos o página, ahí mismo me los podés pasar.",
   });
 
 export function questionIndex(key: string | null): number {
@@ -692,7 +709,12 @@ export function extractWithRules(key: QuestionKey, raw: string, b: B): Extractio
       };
     }
     case "owner":
-      text = cap(text.replace(/^(me llamo|soy|mi nombre es|yo soy)\s+/i, ""));
+      // El saludo pregunta "¿cómo estás?": se quita el "bien, gracias" y se toma el nombre.
+      text = cap(
+        text.match(/(?:me llamo|mi nombre es|yo soy|soy)\s+([^,.!?]+)/i)?.[1]?.trim() ??
+          text.replace(/^((hola|buenas tardes|buenas noches|buenos días|buenas|todo bien|muy bien|bien|gracias|¿?y (tú|usted|vos)\??)[,.!\s]*)+/i, ""),
+      );
+      if (!text) return { ok: false, ack: "¡Qué gusto! ¿Y cómo te llamas?" };
       return { ok: true, ack: `¡Mucho gusto, ${text}!`, patch: { owner_name: text } };
     case "name":
       text = cap(text.replace(/^(se llama|mi negocio se llama|el negocio se llama|es)\s+/i, ""));
