@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Fish } from "@/components/fish";
 import { Button } from "@/components/ui";
 import { canSpeak, pickVoice, recognitionClass, sentences, speakable, type Recognition } from "@/lib/voice";
+import { canRealtime, RealtimeVoice } from "@/lib/voice-realtime";
 import { canRecord, startRecording, type RecorderHandle } from "@/lib/voice-recorder";
 import { answerInterview } from "./actions";
 
@@ -29,18 +30,21 @@ function SpeakerIcon({ className = "size-5", on }: { className?: string; on: boo
   );
 }
 
-// Voz de la entrevista. Con la IA de voz (aiVoice), Nuna habla con voz natural de OpenAI y lo que
-// dice el dueño se graba y se transcribe con IA. Sin ella, se usa la voz y el reconocimiento del navegador.
+// Voz de la entrevista. "Conversar por voz" usa la voz en tiempo real de OpenAI (realtime): Nuna
+// habla con voz natural y escucha continuamente. Si no se puede, usa la voz con IA por partes
+// (aiVoice: audio + grabación) y, sin IA, la voz y el reconocimiento del navegador.
 export function InterviewChat({
   messages,
   open,
   lang = "es-MX",
   aiVoice = false,
+  realtime = false,
 }: {
   messages: Message[];
   open: boolean;
   lang?: string;
   aiVoice?: boolean;
+  realtime?: boolean;
 }) {
   const [draft, setDraft] = useState("");
   const [pending, startTransition] = useTransition();
@@ -62,12 +66,17 @@ export function InterviewChat({
   const queueRef = useRef<Message[]>([]);
   const afterSpeakRef = useRef<(() => void) | null>(null);
   const useAi = useRef(aiVoice);
+  const rtRef = useRef<RealtimeVoice | null>(null); // conversación en tiempo real
+  const [live, setLive] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const pendingRef = useRef(false);
 
   const lastNuna = messages.filter((m) => m.role !== "owner").at(-1)?.id ?? null;
   const spokenRef = useRef<string | null>(lastNuna); // lo que ya estaba al abrir no se vuelve a leer
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
+    pendingRef.current = pending;
   }, [messages.length, pending]);
 
   const send = useCallback(
@@ -94,6 +103,9 @@ export function InterviewChat({
   }
 
   const stopAll = useCallback(() => {
+    rtRef.current?.close();
+    rtRef.current = null;
+    setLive(false);
     recRef.current?.abort();
     recRef.current = null;
     recorderRef.current?.cancel();
@@ -310,7 +322,7 @@ export function InterviewChat({
     try {
       saved = localStorage.getItem(VOICE_KEY) === "1";
     } catch {}
-    if (saved && listenOk && speakOk) {
+    if (saved && listenOk && speakOk && !(realtime && canRealtime())) {
       voiceModeRef.current = true;
       setVoiceMode(true);
     }
@@ -320,8 +332,9 @@ export function InterviewChat({
       audioRef.current?.pause();
       if (canSpeak()) window.speechSynthesis.cancel();
       void audioCtxRef.current?.close().catch(() => {});
+      rtRef.current?.close();
     };
-  }, [aiVoice]);
+  }, [aiVoice, realtime]);
 
   // Llegó un mensaje nuevo de Nuna: en modo voz lo lee y después escucha la respuesta.
   useEffect(() => {
@@ -330,6 +343,11 @@ export function InterviewChat({
     spokenRef.current = lastNuna;
     if (!voiceModeRef.current) return;
     const fresh = messages.slice(from + 1).filter((m) => m.role !== "owner");
+    if (rtRef.current) {
+      // En tiempo real Nuna lee y luego sigue escuchando sola.
+      for (const m of fresh) rtRef.current.speak(m.content);
+      return;
+    }
     speak(fresh, () => {
       if (voiceModeRef.current && open) listen(true);
     });
@@ -346,11 +364,71 @@ export function InterviewChat({
     if (!next) return stopAll();
     unlockAudio();
     const last = messages.filter((m) => m.role !== "owner").at(-1);
+    if (realtime && canRealtime()) {
+      void startRealtime(last?.content ?? null);
+      return;
+    }
     const then = () => {
       if (voiceModeRef.current && open) listen(true);
     };
     if (last) speak([last], then);
     else then();
+  }
+
+  // Conversación en tiempo real: conecta, lee la última pregunta y escucha. Si falla, usa la voz por partes.
+  async function startRealtime(firstText: string | null) {
+    setConnecting(true);
+    const rt = new RealtimeVoice({
+      onSpeaking: setSpeaking,
+      onListening: setListening,
+      onTranscript: (text) => {
+        if (!voiceModeRef.current) return;
+        if (pendingRef.current) {
+          setHint("Espera a que Nuna termine de anotar tu respuesta anterior.");
+          return;
+        }
+        setHint(null);
+        send(text);
+      },
+      onClosed: (reason) => {
+        if (rtRef.current !== rt) return;
+        rtRef.current = null;
+        setLive(false);
+        if (reason !== "close_requested" && voiceModeRef.current) {
+          voiceModeRef.current = false;
+          setVoiceMode(false);
+          setHint("Se cortó la conversación por voz. Toca «Conversar por voz» para seguir.");
+        }
+      },
+    });
+    rtRef.current = rt;
+    try {
+      await rt.connect();
+      if (rtRef.current !== rt) return rt.close();
+      setLive(true);
+      if (firstText) rt.speak(firstText);
+    } catch (error) {
+      console.error("Voz en tiempo real:", error);
+      rt.close();
+      rtRef.current = null;
+      if (!voiceModeRef.current) return;
+      const denied = error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "SecurityError");
+      if (denied) {
+        voiceModeRef.current = false;
+        setVoiceMode(false);
+        setHint("Para hablar, permite el uso del micrófono en tu navegador (el ícono junto a la dirección de la página).");
+        return;
+      }
+      // Respaldo: voz con IA por partes (o la del navegador).
+      const last = messages.filter((m) => m.role !== "owner").at(-1);
+      const then = () => {
+        if (voiceModeRef.current && open) listen(true);
+      };
+      if (last) speak([last], then);
+      else then();
+    } finally {
+      setConnecting(false);
+    }
   }
 
   function onMic() {
@@ -365,15 +443,21 @@ export function InterviewChat({
   }
 
   const voiceReady = support.listen && support.speak;
-  const status = speaking
-    ? "Nuna está hablando…"
-    : listening
-      ? "Te escucho… cuando termines, haz una pausa."
-      : transcribing
-        ? "Nuna está entendiendo lo que dijiste…"
-        : voiceMode
-          ? "Nuna te lee cada pregunta y escucha tu respuesta."
-          : "Nuna te lee las preguntas y tú contestas hablando.";
+  const status = connecting
+    ? "Conectando la voz de Nuna…"
+    : speaking
+      ? "Nuna está hablando…"
+      : live
+        ? pending
+          ? "Nuna está anotando tu respuesta…"
+          : "Te escucho. Habla cuando quieras; al terminar, haz una pausa."
+        : listening
+          ? "Te escucho… cuando termines, haz una pausa."
+          : transcribing
+            ? "Nuna está entendiendo lo que dijiste…"
+            : voiceMode
+              ? "Nuna te lee cada pregunta y escucha tu respuesta."
+              : "Nuna te lee las preguntas y tú contestas hablando.";
 
   return (
     <div className="flex flex-col gap-3">
@@ -422,6 +506,7 @@ export function InterviewChat({
             <button
               type="button"
               onClick={() => {
+                rtRef.current?.stopSpeaking();
                 queueRef.current = [];
                 afterSpeakRef.current = null;
                 audioRef.current?.pause();
@@ -446,7 +531,7 @@ export function InterviewChat({
           }}
           className="flex gap-2"
         >
-          {support.listen && (
+          {support.listen && !live && (
             <button
               type="button"
               onClick={onMic}

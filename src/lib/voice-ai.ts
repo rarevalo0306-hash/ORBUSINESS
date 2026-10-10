@@ -16,7 +16,7 @@ const TTS_VOICE = () => process.env.OPENAI_TTS_VOICE?.trim() || "marin";
 const STT_MODEL = () => process.env.OPENAI_STT_MODEL?.trim() || "gpt-transcribe";
 
 // Límites diarios por negocio, para que nadie use la voz sin control (cada uso queda en audit_log).
-export const DAILY_LIMIT = { "voice.tts": 400, "voice.stt": 300 } as const;
+export const DAILY_LIMIT = { "voice.tts": 400, "voice.stt": 300, "voice.realtime": 30 } as const;
 
 export async function underDailyLimit(supabase: Supabase, businessId: string, action: keyof typeof DAILY_LIMIT) {
   const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
@@ -33,8 +33,8 @@ export async function underDailyLimit(supabase: Supabase, businessId: string, ac
 function voiceInstructions(country: string | null) {
   return (
     `Habla en español latinoamericano${country ? `, con un acento neutro cercano al de ${country}` : ""}. ` +
-    "Eres Nuna, una asesora de negocios cálida, segura y amable. Tono conversacional y natural, " +
-    "ritmo tranquilo pero ágil, sonrisa en la voz. Nada de tono de locutor ni de robot."
+    "Eres Nuna, una asesora de negocios: voz joven, cálida y con energía, como una mujer de unos 30 años que sonríe al hablar. " +
+    "Ritmo ágil y conversacional, entonación expresiva. Nada de tono de locutora, de robot ni de lectura lenta."
   );
 }
 
@@ -77,4 +77,56 @@ export async function transcribe(audio: Blob, filename: string, prompt: string):
   }
   const json = (await res.json()) as { text?: string };
   return json.text?.trim() ?? null;
+}
+
+// ---------- Voz en tiempo real (OpenAI Realtime) ----------
+// El navegador habla directo con OpenAI por WebRTC usando una llave temporal que crea el servidor.
+// La IA de tiempo real es solo la VOZ de Nuna: lee exactamente lo que escribe Nuna (DeepSeek) y
+// transcribe lo que dice el dueño; nunca responde por su cuenta. Así la entrevista sigue igual.
+
+const REALTIME_MODEL = () => process.env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime-2.1";
+const REALTIME_VOICE = () => process.env.OPENAI_REALTIME_VOICE?.trim() || TTS_VOICE();
+const REALTIME_TRANSCRIBE = () => process.env.OPENAI_REALTIME_TRANSCRIBE?.trim() || "gpt-4o-mini-transcribe";
+export const realtimeEnabled = () => aiVoiceEnabled() && process.env.OPENAI_REALTIME !== "off";
+
+function realtimeInstructions(country: string | null) {
+  return (
+    "Eres SOLO la voz de Nuna, una asesora de negocios. Nunca respondas ni converses por tu cuenta. " +
+    "Cuando te pidan leer un texto, léelo en voz alta EXACTAMENTE como está, palabra por palabra, sin agregar, quitar ni cambiar nada. " +
+    `Habla en español latinoamericano natural${country ? `, con acento neutro cercano al de ${country}` : ""}: ` +
+    "voz joven, cálida y con energía, como una mujer de unos 30 años que sonríe al hablar; ritmo ágil y conversacional, " +
+    "entonación expresiva y humana. Nada de tono de locutora, de robot ni de lectura lenta."
+  );
+}
+
+// Llave temporal para que el navegador se conecte (vence en pocos minutos si no se usa).
+export async function realtimeClientSecret(opts: { country: string | null; prompt: string }) {
+  const res = await fetch(`${BASE()}/realtime/client_secrets`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${KEY()}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session: {
+        type: "realtime",
+        model: REALTIME_MODEL(),
+        instructions: realtimeInstructions(opts.country),
+        output_modalities: ["audio"],
+        audio: {
+          input: {
+            transcription: { model: REALTIME_TRANSCRIBE(), language: "es", prompt: opts.prompt.slice(0, 800) },
+            // Detecta cuándo el dueño terminó de hablar, pero la IA no contesta sola (lo hace Nuna).
+            turn_detection: { type: "semantic_vad", create_response: false, interrupt_response: true, eagerness: "low" },
+            noise_reduction: { type: "near_field" },
+          },
+          output: { voice: REALTIME_VOICE(), speed: 1.05 },
+        },
+      },
+    }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) {
+    console.error("OpenAI realtime respondió", res.status, (await res.text()).slice(0, 400));
+    return null;
+  }
+  const json = (await res.json()) as { value?: string };
+  return json.value ?? null;
 }
