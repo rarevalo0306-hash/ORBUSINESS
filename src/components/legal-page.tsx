@@ -22,6 +22,7 @@ export function LegalPage({ title, children }: { title: string; children: ReactN
       <nav className="flex gap-6 border-t border-line pt-6 text-sm text-muted">
         <Link href="/privacidad" className="underline underline-offset-4 hover:text-bone">Privacidad</Link>
         <Link href="/terminos" className="underline underline-offset-4 hover:text-bone">Términos</Link>
+        <Link href="/eliminar-datos" className="underline underline-offset-4 hover:text-bone">Borrar mis datos</Link>
         <Link href="/" className="underline underline-offset-4 hover:text-bone">Inicio</Link>
       </nav>
     </main>
