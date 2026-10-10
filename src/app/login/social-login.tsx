@@ -5,7 +5,7 @@ import { Button, Field } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
 import { sendWhatsappCode, signInWithProvider, verifyWhatsappCode, type WhatsappState } from "./actions";
 
-export type Providers = { google: boolean; facebook: boolean; whatsapp: boolean };
+export type Providers = { google: boolean; facebook: boolean; whatsapp: boolean; phoneChannel: "sms" | "whatsapp" };
 
 const button =
   "flex min-h-12 w-full items-center justify-center gap-3 rounded-full border border-line bg-panel px-6 font-semibold transition hover:bg-panel-2 active:scale-[0.98]";
@@ -39,7 +39,16 @@ function WhatsappIcon() {
   );
 }
 
-function WhatsappLogin({ onBack }: { onBack: () => void }) {
+function PhoneIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-5" aria-hidden>
+      <rect x="6" y="2" width="12" height="20" rx="2.5" />
+      <path d="M11 18h2" />
+    </svg>
+  );
+}
+
+function WhatsappLogin({ onBack, viaWhatsapp }: { onBack: () => void; viaWhatsapp: boolean }) {
   const [sent, send, sending] = useActionState<WhatsappState, FormData>(sendWhatsappCode, {});
   const [checked, verify, verifying] = useActionState<WhatsappState, FormData>(verifyWhatsappCode, {});
   const phone = checked.phone || sent.phone;
@@ -48,7 +57,7 @@ function WhatsappLogin({ onBack }: { onBack: () => void }) {
     <div className="flex flex-col gap-4 rounded-[24px] border border-line bg-panel p-5">
       {!phone ? (
         <form action={send} className="flex flex-col gap-4">
-          <Field label="Tu número de WhatsApp" id="phone" name="phone" type="tel" autoComplete="tel" placeholder="+505 8888 7777" required />
+          <Field label={viaWhatsapp ? "Tu número de WhatsApp" : "Tu número de celular"} id="phone" name="phone" type="tel" autoComplete="tel" placeholder="+505 8888 7777" required />
           <Button type="submit" disabled={sending}>
             {sending ? "Mandando…" : "Mandarme el código"}
           </Button>
@@ -78,7 +87,8 @@ function WhatsappLogin({ onBack }: { onBack: () => void }) {
 export function SocialLogin({ providers }: { providers: Providers }) {
   const [whatsapp, setWhatsapp] = useState(false);
   if (!providers.google && !providers.facebook && !providers.whatsapp) return null;
-  if (whatsapp) return <WhatsappLogin onBack={() => setWhatsapp(false)} />;
+  const viaWhatsapp = providers.phoneChannel === "whatsapp";
+  if (whatsapp) return <WhatsappLogin onBack={() => setWhatsapp(false)} viaWhatsapp={viaWhatsapp} />;
   return (
     <div className="flex flex-col gap-3">
       {providers.google && (
@@ -97,7 +107,7 @@ export function SocialLogin({ providers }: { providers: Providers }) {
       )}
       {providers.whatsapp && (
         <button type="button" onClick={() => setWhatsapp(true)} className={button}>
-          <WhatsappIcon /> Continuar con WhatsApp
+          {viaWhatsapp ? <WhatsappIcon /> : <PhoneIcon />} {viaWhatsapp ? "Continuar con WhatsApp" : "Continuar con tu celular"}
         </button>
       )}
       <div className="flex items-center gap-3 py-1 text-sm text-muted" aria-hidden>

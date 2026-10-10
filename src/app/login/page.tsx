@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Wordmark } from "@/components/fish";
 import { LoginForm } from "./login-form";
+import { phoneChannel } from "./actions";
 import { SocialLogin, type Providers } from "./social-login";
 
 // Qué formas de entrar están activadas en Supabase (se revisa cada 5 minutos).
@@ -11,9 +12,9 @@ async function providers(): Promise<Providers> {
       next: { revalidate: 300 },
     });
     const { external = {} } = (await res.json()) as { external?: Record<string, boolean> };
-    return { google: Boolean(external.google), facebook: Boolean(external.facebook), whatsapp: Boolean(external.phone) };
+    return { google: Boolean(external.google), facebook: Boolean(external.facebook), whatsapp: Boolean(external.phone), phoneChannel: await phoneChannel() };
   } catch {
-    return { google: false, facebook: false, whatsapp: false };
+    return { google: false, facebook: false, whatsapp: false, phoneChannel: "sms" };
   }
 }
 

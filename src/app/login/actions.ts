@@ -57,16 +57,20 @@ export async function signInWithProvider(provider: "google" | "facebook") {
   redirect(data.url);
 }
 
-// Entrar con WhatsApp: se manda un código de 6 números al WhatsApp y se escribe aquí.
+// Entrar con el celular: se manda un código de 6 números y se escribe aquí. Va por SMS hasta que el
+// número de WhatsApp de Orbusiness esté aprobado; entonces PHONE_OTP_CHANNEL=whatsapp.
+export const phoneChannel = async () => (process.env.PHONE_OTP_CHANNEL === "whatsapp" ? "whatsapp" : "sms");
 export type WhatsappState = { error?: string; notice?: string; phone?: string };
 
 export async function sendWhatsappCode(_prev: WhatsappState, formData: FormData): Promise<WhatsappState> {
   const phone = normalizePhone(String(formData.get("phone") ?? ""), null);
   if (!phone) return { error: "Escribe tu número con el código de país. Por ejemplo: +505 8888 7777 o +1 305 555 1234." };
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithOtp({ phone, options: { channel: "whatsapp" } });
-  if (error) return { error: "No pudimos mandar el código por WhatsApp. Revisa el número e intenta de nuevo." };
-  return { phone, notice: "Te mandamos un código por WhatsApp. Escríbelo aquí." };
+  const channel = await phoneChannel();
+  const via = channel === "whatsapp" ? "WhatsApp" : "mensaje de texto";
+  const { error } = await supabase.auth.signInWithOtp({ phone, options: { channel } });
+  if (error) return { error: `No pudimos mandar el código por ${via}. Revisa el número e intenta de nuevo.` };
+  return { phone, notice: `Te mandamos un código por ${via}. Escríbelo aquí.` };
 }
 
 export async function verifyWhatsappCode(_prev: WhatsappState, formData: FormData): Promise<WhatsappState> {
