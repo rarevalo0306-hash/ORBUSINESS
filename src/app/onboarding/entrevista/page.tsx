@@ -47,22 +47,37 @@ export default async function InterviewPage() {
             : "Contesta con tus palabras. Nuna está en modo básico (sin IA): entiende respuestas sencillas."
         }
       />
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="flex flex-col gap-3">
           <InterviewChat messages={messages ?? []} open={open} lang={voiceLang(business.country_code)} aiVoice={aiVoiceEnabled()} realtime={realtimeEnabled()} />
           {missing.length > 0 && (
-            <form action={completeMissing} className="flex flex-wrap items-center gap-3 rounded-2xl border border-lime/40 bg-lime/10 p-4">
+            <form action={completeMissing} className="flex flex-wrap items-center gap-3 rounded-[24px] border border-lime/40 bg-lime/10 p-5">
               <p className="flex-1">
                 Nuna necesita {missing.length} dato{missing.length > 1 ? "s" : ""} más para dejar todo listo (
                 {missing.map((q) => q.label.toLowerCase()).join(", ")}).
               </p>
-              <button className="min-h-11 rounded-full bg-lime px-5 font-semibold text-lime-ink">Completar ahora</button>
+              <button className="min-h-11 rounded-full bg-lime px-5 font-semibold text-lime-ink transition active:scale-[0.98]">Completar ahora</button>
             </form>
           )}
         </div>
-        <Card className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
+        {/* Avance en grande, estilo tablero */}
+        <Card className="flex flex-col gap-4">
+          <span className="text-sm font-semibold text-muted">Lo que Nuna ya sabe</span>
+          <span className="font-display text-6xl font-bold leading-none tracking-tight">
+            {understood.filter((i) => i.value).length}
+            <span className="text-3xl text-muted">/{understood.length}</span>
+          </span>
+          <div className="h-1.5 overflow-hidden rounded-full bg-panel-2" aria-hidden>
+            <div
+              className="h-full rounded-full bg-lime transition-all duration-500"
+              style={{ width: `${(understood.filter((i) => i.value).length / Math.max(understood.length, 1)) * 100}%` }}
+            />
+          </div>
+        </Card>
+        <Card className="flex flex-col gap-4">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="font-semibold">Lo que Nuna entendió</h2>
+            <h2 className="font-display text-xl font-bold tracking-tight">Lo que Nuna entendió</h2>
             <RestartButton />
           </div>
           <dl className="flex flex-col gap-3">
@@ -75,7 +90,7 @@ export default async function InterviewPage() {
                 {item.value && fixingKey !== item.key && (
                   <form action={startFix.bind(null, item.key)}>
                     <button
-                      className="min-h-9 shrink-0 rounded-full border border-line px-3 text-xs text-muted hover:text-bone"
+                      className="min-h-9 shrink-0 rounded-full bg-panel-2 px-3 text-xs font-semibold text-muted transition hover:text-bone active:scale-[0.97]"
                       aria-label={`Corregir ${item.label.toLowerCase()}`}
                     >
                       Corregir
@@ -86,6 +101,7 @@ export default async function InterviewPage() {
             ))}
           </dl>
         </Card>
+        </div>
       </div>
       {interviewDone && !open && (
         <ButtonLink href="/onboarding/marca" className="self-start">

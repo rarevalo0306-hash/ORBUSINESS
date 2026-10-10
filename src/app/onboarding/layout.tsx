@@ -7,7 +7,7 @@ export default async function OnboardingLayout({ children }: LayoutProps<"/onboa
   const { business } = await getOwnerContext();
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-6 sm:px-8">
+    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-10 px-4 py-6 sm:px-8 sm:py-10">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <Wordmark />
         <form action={signOut}>
@@ -15,7 +15,7 @@ export default async function OnboardingLayout({ children }: LayoutProps<"/onboa
         </form>
       </header>
       {business && <StepNav reached={business.onboarding_step} />}
-      <main className="flex flex-1 flex-col gap-6">{children}</main>
+      <main className="flex flex-1 flex-col gap-8">{children}</main>
     </div>
   );
 }

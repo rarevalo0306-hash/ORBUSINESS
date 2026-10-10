@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Fish } from "@/components/fish";
-import { Button } from "@/components/ui";
 import { canSpeak, pickVoice, recognitionClass, sentences, speakable, type Recognition } from "@/lib/voice";
 import { canRealtime, RealtimeVoice } from "@/lib/voice-realtime";
 import { canRecord, startRecording, type RecorderHandle } from "@/lib/voice-recorder";
@@ -464,17 +463,17 @@ export function InterviewChat({
       <div
         ref={listRef}
         aria-live="polite"
-        className="flex h-[26rem] flex-col gap-4 overflow-y-auto rounded-2xl border border-line bg-panel p-4"
+        className="flex h-[28rem] flex-col gap-5 overflow-y-auto rounded-[28px] border border-white/[0.06] bg-panel p-5 sm:h-[32rem] sm:p-7"
       >
         {messages.map((m) =>
           m.role === "owner" ? (
-            <p key={m.id} className="max-w-[80%] self-end rounded-2xl rounded-br-md bg-panel-2 px-4 py-2.5">
+            <p key={m.id} className="max-w-[80%] self-end rounded-[22px] rounded-br-md bg-lime px-4 py-2.5 font-medium text-lime-ink">
               {m.content}
             </p>
           ) : (
             <div key={m.id} className="flex max-w-[90%] gap-3">
               <Fish size={26} className="mt-0.5 shrink-0 text-lime" />
-              <p className="leading-relaxed">{m.content}</p>
+              <p className="text-[17px] leading-relaxed">{m.content}</p>
             </div>
           ),
         )}
@@ -490,7 +489,7 @@ export function InterviewChat({
         <button
           type="button"
           onClick={toggleVoiceMode}
-          className="flex w-full items-center gap-4 rounded-2xl border border-lime/40 bg-lime/10 p-4 text-left transition hover:bg-lime/15"
+          className="flex w-full items-center gap-4 rounded-[24px] border border-lime/40 bg-lime/10 p-4 text-left transition hover:bg-lime/15 active:scale-[0.99] sm:p-5"
         >
           <span className="relative flex size-14 shrink-0 items-center justify-center rounded-full bg-lime text-lime-ink">
             <span aria-hidden className="absolute inset-0 rounded-full bg-lime/40 motion-safe:animate-ping [animation-duration:2.5s]" />
@@ -504,7 +503,7 @@ export function InterviewChat({
       )}
 
       {open && voiceMode && (
-        <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-lime/40 bg-panel p-4">
+        <div className="flex flex-wrap items-center gap-4 rounded-[24px] border border-lime/40 bg-panel p-4 sm:p-5">
           {/* En tiempo real escucha sola; en el respaldo, tocar el círculo termina o empieza a escuchar. */}
           <button
             type="button"
@@ -565,7 +564,7 @@ export function InterviewChat({
               disabled={transcribing}
               aria-pressed={listening}
               aria-label={listening ? "Terminé de hablar" : "Responder hablando"}
-              className={`relative flex size-12 shrink-0 items-center justify-center rounded-full border transition disabled:opacity-60 ${
+              className={`relative flex size-14 shrink-0 items-center justify-center rounded-full border transition active:scale-95 disabled:opacity-60 ${
                 listening ? "border-red-500 bg-red-500 text-white" : "border-line text-bone hover:bg-panel"
               }`}
               style={listening ? { boxShadow: `0 0 0 ${3 + level * 10}px rgb(239 68 68 / 0.25)` } : undefined}
@@ -584,11 +583,18 @@ export function InterviewChat({
             placeholder={
               listening ? "Te escucho…" : transcribing ? "Escribiendo lo que dijiste…" : support.listen ? "Escribe o toca el micrófono…" : "Escribe tu respuesta…"
             }
-            className="min-h-12 min-w-0 flex-1 rounded-full border border-line bg-panel px-5 placeholder:text-muted/70"
+            className="min-h-14 min-w-0 flex-1 rounded-full border border-white/[0.06] bg-panel px-6 text-[17px] transition placeholder:text-muted/70 focus:border-lime/60"
           />
-          <Button type="submit" disabled={pending || !draft.trim()}>
-            Enviar
-          </Button>
+          <button
+            type="submit"
+            disabled={pending || !draft.trim()}
+            aria-label="Enviar"
+            className="flex size-14 shrink-0 items-center justify-center rounded-full bg-lime text-lime-ink transition hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:active:scale-100"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="size-6" aria-hidden>
+              <path d="M12 19V5M5 12l7-7 7 7" />
+            </svg>
+          </button>
         </form>
       )}
       {hint && (
