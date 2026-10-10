@@ -16,7 +16,7 @@ import {
 } from "@/lib/brand";
 import type { Tables } from "@/lib/database.types";
 import { marketContext, marketFor } from "@/lib/markets";
-import { aiJson } from "@/lib/nuna";
+import { aiJson, type Provider } from "@/lib/nuna";
 
 type Business = Tables<"businesses">;
 
@@ -54,7 +54,11 @@ const KitSchema = z.object({
 }).partial(); // lo que falte o venga mal lo completa sanitizeKit
 const KitsSchema = z.object({ kits: z.array(KitSchema) });
 
-export async function proposeKits(b: Business, services: { name: string }[]): Promise<BrandKit[]> {
+export async function proposeKits(
+  b: Business,
+  services: { name: string }[],
+  brain?: { provider: Provider; model?: string }, // para comparar cerebros
+): Promise<BrandKit[]> {
   const fallback = rulesKits(b);
   const icons = iconsFor(b.industry).slice(0, 18);
 
@@ -114,11 +118,15 @@ export async function proposeKits(b: Business, services: { name: string }[]): Pr
       '"fonts": "id", "mark": "id", "symbolIdea": "idea del símbolo en inglés", "icon": "id", "layout": "id", "nameStyle": "id", "pattern": "id"}, ...]} con exactamente 3 kits.',
     maxTokens: 6000,
     temperature: 0.95,
+    ...brain,
   });
 
   // Los valores se aceptan como texto y sanitizeKit deja solo los válidos.
   const parsed = out?.kits ?? [];
-  if (!parsed.length) return fallback;
+  if (!parsed.length) {
+    if (brain) throw new Error("La IA no devolvió propuestas"); // en la comparación no se disfraza el fallo
+    return fallback;
+  }
   const caption = captionFor(b);
   const kits = parsed.slice(0, 3).map((k, i) => sanitizeKit({ ...k, caption: k.caption || caption } as Partial<BrandKit>, fallback[i] ?? fallback[0]));
   while (kits.length < 3) kits.push(fallback[kits.length]);

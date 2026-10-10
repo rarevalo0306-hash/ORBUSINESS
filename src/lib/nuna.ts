@@ -20,14 +20,15 @@ type B = Pick<BusinessRow, "business_type" | "country_code"> &
   Partial<Pick<BusinessRow, "name" | "industry" | "owner_name">>;
 
 // ---------- Proveedor de IA ----------
-// Se elige con NUNA_AI_PROVIDER = "deepseek" | "anthropic" | "rules".
+// Se elige con NUNA_AI_PROVIDER = "deepseek" | "openai" | "anthropic" | "rules".
 // Si no se define, usa el primero que tenga llave (DeepSeek, luego Claude); sin llaves, reglas.
 
-type Provider = "deepseek" | "anthropic" | "rules";
+export type Provider = "deepseek" | "openai" | "anthropic" | "rules";
 
 export function nunaProvider(): Provider {
   const chosen = process.env.NUNA_AI_PROVIDER;
   if (chosen === "deepseek" && process.env.DEEPSEEK_API_KEY) return "deepseek";
+  if (chosen === "openai" && process.env.OPENAI_API_KEY) return "openai";
   if (chosen === "anthropic" && process.env.ANTHROPIC_API_KEY) return "anthropic";
   if (chosen === "rules") return "rules";
   if (process.env.DEEPSEEK_API_KEY) return "deepseek";
@@ -208,6 +209,13 @@ async function deepseekFetch(body: Record<string, unknown>, timeoutMs: number) {
 const JSON_EXAMPLE =
   '{"understood": true, "reply": "Anotado.", "text_value": "Ferretería El Martillo", "bool_value": null, "business_type": null, "country": null, "payment_timing": null, "services": null, "currency_choice": null, "payment_methods": null, "address_form": null, "business_name": null}';
 
+const ANSWER_HINT =
+  "understood (boolean), reply (string), text_value (string o null), bool_value (boolean o null), " +
+  'business_type ("products", "services", "both" o null), country (string o null), ' +
+  'payment_timing ("before", "deposit", "after", "at_sale", "credit" o null), services (lista de {"name", "price"} donde price es número o null, o null), ' +
+  'currency_choice ("local", "other", "both" o null), payment_methods (lista de textos o null), address_form ("tu", "usted", "vos" o null), business_name (string o null). ' +
+  `Ejemplo de json: ${JSON_EXAMPLE}`;
+
 // DeepSeek a veces devuelve vacío: se reintenta una vez antes de caer a las reglas.
 async function askDeepSeek(key: QuestionKey, answer: string, b: B): Promise<Answer> {
   try {
@@ -228,13 +236,7 @@ async function askDeepSeekOnce(key: QuestionKey, answer: string, b: B): Promise<
       messages: [
         {
           role: "system",
-          content:
-            `${SYSTEM}\n\nResponde solo con un objeto json con estas claves: ` +
-            "understood (boolean), reply (string), text_value (string o null), bool_value (boolean o null), " +
-            'business_type ("products", "services", "both" o null), country (string o null), ' +
-            'payment_timing ("before", "deposit", "after", "at_sale", "credit" o null), services (lista de {"name", "price"} donde price es número o null, o null), ' +
-            'currency_choice ("local", "other", "both" o null), payment_methods (lista de textos o null), address_form ("tu", "usted", "vos" o null), business_name (string o null). ' +
-            `Ejemplo de json: ${JSON_EXAMPLE}`,
+          content: `${SYSTEM}\n\nResponde solo con un objeto json con estas claves: ${ANSWER_HINT}`,
         },
         { role: "user", content: userPrompt(key, answer, b) },
       ],
@@ -266,6 +268,53 @@ async function askClaude(key: QuestionKey, answer: string, b: B): Promise<Answer
   return response.parsed_output;
 }
 
+// ---------- OpenAI (API "responses") ----------
+
+const OPENAI_BASE_URL = () => process.env.OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1";
+export const openaiModel = () => process.env.OPENAI_MODEL?.trim() || "gpt-6.1-sol";
+
+async function openaiJsonText(opts: { system: string; user: string; model?: string; maxTokens: number }) {
+  const body: Record<string, unknown> = {
+    model: opts.model || openaiModel(),
+    input: [
+      { role: "system", content: opts.system },
+      { role: "user", content: opts.user },
+    ],
+    text: { format: { type: "json_object" } },
+    reasoning: { effort: "low" },
+    max_output_tokens: opts.maxTokens,
+  };
+  const send = (b: Record<string, unknown>) =>
+    fetch(`${OPENAI_BASE_URL()}/responses`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+      body: JSON.stringify(b),
+      signal: AbortSignal.timeout(120_000),
+    });
+  let res = await send(body);
+  if (res.status === 400) {
+    // Si el modelo no acepta la opción de razonamiento, se pide sin ella.
+    console.error("OpenAI rechazó el pedido, se repite sin 'reasoning':", (await res.text()).slice(0, 300));
+    const { reasoning: _ignored, ...rest } = body;
+    void _ignored;
+    res = await send(rest);
+  }
+  if (!res.ok) throw new Error(`OpenAI respondió ${res.status}: ${(await res.text()).slice(0, 400)}`);
+  const data = (await res.json()) as {
+    output_text?: string;
+    output?: { type?: string; content?: { type?: string; text?: string }[] }[];
+  };
+  return (
+    data.output_text ??
+    (data.output ?? [])
+      .filter((o) => o.type === "message")
+      .flatMap((o) => o.content ?? [])
+      .filter((c) => c.type === "output_text")
+      .map((c) => c.text ?? "")
+      .join("")
+  );
+}
+
 // ---------- Respuesta estructurada genérica (para el kit de marca y otras tareas) ----------
 
 export async function aiJson<T>(opts: {
@@ -275,14 +324,37 @@ export async function aiJson<T>(opts: {
   jsonHint: string; // descripción de las claves y un ejemplo, para DeepSeek
   maxTokens?: number;
   temperature?: number; // solo DeepSeek (más alto = más creativo)
+  provider?: Provider; // para comparar cerebros; si no, el configurado
+  model?: string;
 }): Promise<T | null> {
-  const provider = nunaProvider();
+  const provider = opts.provider ?? nunaProvider();
   if (provider === "rules") return null;
   try {
+    if (provider === "openai") {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const content = await openaiJsonText({
+          system: `${opts.system}\n\nResponde solo con un objeto json. ${opts.jsonHint}`,
+          user: opts.user,
+          model: opts.model,
+          maxTokens: Math.max(opts.maxTokens ?? 4000, 4000) * 2, // el razonamiento también cuenta
+        });
+        let raw: unknown;
+        try {
+          raw = JSON.parse(content.trim().replace(/^```(?:json)?\s*|\s*```$/g, ""));
+        } catch {
+          console.error("Nuna (openai): respuesta JSON incompleta, se pide de nuevo.");
+          continue;
+        }
+        const parsed = opts.schema.safeParse(raw);
+        if (parsed.success) return parsed.data;
+        console.error("Nuna (openai): la respuesta no tiene el formato esperado:", parsed.error.issues.slice(0, 3));
+      }
+      return null;
+    }
     if (provider === "anthropic") {
       anthropicClient ??= new Anthropic();
       const response = await anthropicClient.messages.parse({
-        model: process.env.ANTHROPIC_MODEL || "claude-opus-5-5",
+        model: opts.model || process.env.ANTHROPIC_MODEL || "claude-opus-5-5",
         max_tokens: opts.maxTokens ?? 4000,
         output_config: { effort: "low", format: zodOutputFormat(opts.schema) },
         system: opts.system,
@@ -293,7 +365,7 @@ export async function aiJson<T>(opts: {
     for (let attempt = 0; attempt < 2; attempt++) {
       const response = await deepseekFetch(
         {
-          model: process.env.DEEPSEEK_MODEL || "deepseek-flash",
+          model: opts.model || process.env.DEEPSEEK_MODEL || "deepseek-flash",
           max_tokens: opts.maxTokens ?? 4000,
           ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
           response_format: { type: "json_object" },
@@ -329,13 +401,24 @@ export async function aiJson<T>(opts: {
   }
 }
 
+async function askOpenAI(key: QuestionKey, answer: string, b: B): Promise<Answer> {
+  const out = await aiJson({ system: SYSTEM, user: userPrompt(key, answer, b), schema: AnswerSchema, jsonHint: `Claves: ${ANSWER_HINT}`, maxTokens: 2000, provider: "openai" });
+  if (!out) throw new Error("OpenAI no devolvió una respuesta válida");
+  return out;
+}
+
 // ---------- Punto de entrada ----------
 
 export async function extractAnswer(key: QuestionKey, answer: string, b: B): Promise<Extraction> {
   const provider = nunaProvider();
   if (provider === "rules") return extractWithRules(key, answer, b);
   try {
-    const out = provider === "deepseek" ? await askDeepSeek(key, answer, b) : await askClaude(key, answer, b);
+    const out =
+      provider === "deepseek"
+        ? await askDeepSeek(key, answer, b)
+        : provider === "openai"
+          ? await askOpenAI(key, answer, b)
+          : await askClaude(key, answer, b);
     const result = toExtraction(key, out, b);
     return result.ok ? { ...result, ack: withoutQuestions(result.ack) } : result;
   } catch (error) {

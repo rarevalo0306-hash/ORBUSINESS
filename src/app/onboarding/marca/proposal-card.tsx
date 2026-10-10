@@ -6,7 +6,8 @@ import { LAYOUTS, backdropCss, fontsById, kitPalette, logoType, type BrandKit } 
 import { chooseKit } from "./actions";
 
 // Una propuesta de marca presentada como un tablero pequeño (logo, símbolo, eslogan y colores).
-export function Proposal({ kit, name, index, selected }: { kit: BrandKit; name: string; index: number; selected: boolean }) {
+// Sin index se muestra solo para ver (sin el botón de elegir), por ejemplo en la comparación de cerebros.
+export function Proposal({ kit, name, index, selected = false }: { kit: BrandKit; name: string; index?: number; selected?: boolean }) {
   const p = kitPalette(kit);
   const f = fontsById(kit.fonts);
   return (
@@ -42,17 +43,19 @@ export function Proposal({ kit, name, index, selected }: { kit: BrandKit; name: 
           {LAYOUTS.find((l) => l.id === kit.layout)?.label} · letra {f.name.toLowerCase()} · {kit.personality.join(" · ")}
         </p>
       </div>
-      <form action={chooseKit.bind(null, index)} className="mt-auto px-2 pb-2">
-        {selected ? (
-          <Button type="button" variant="ghost" disabled className="w-full">
-            ✓ Elegida
-          </Button>
-        ) : (
-          <SubmitButton pendingText="Nuna está escribiendo tu marca…" className="w-full">
-            Elegir esta
-          </SubmitButton>
-        )}
-      </form>
+      {index !== undefined && (
+        <form action={chooseKit.bind(null, index)} className="mt-auto px-2 pb-2">
+          {selected ? (
+            <Button type="button" variant="ghost" disabled className="w-full">
+              ✓ Elegida
+            </Button>
+          ) : (
+            <SubmitButton pendingText="Nuna está escribiendo tu marca…" className="w-full">
+              Elegir esta
+            </SubmitButton>
+          )}
+        </form>
+      )}
     </article>
   );
 }
