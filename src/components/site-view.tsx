@@ -15,7 +15,9 @@ import {
   type Palette,
 } from "@/lib/brand";
 import { currencyName, money, priceLabel } from "@/lib/interview";
+import { legalPages } from "@/lib/site-legal";
 import type { SiteContent, SiteItem } from "@/lib/site";
+import type { KindInfo } from "@/lib/site-kinds";
 import { templateById, type SiteTemplate } from "@/lib/site-templates";
 
 // La página web de un negocio, con la plantilla que eligió el dueño. Usa los colores, letras y logo
@@ -131,7 +133,10 @@ type Ctx = {
   headline: string;
   intro: string;
   orderButton?: (s: SiteItem) => ReactNode;
+  pages: SitePages | null; // null = vista previa de una sola hoja (dentro de la app)
 };
+
+export type SitePages = { home: string; catalog: KindInfo; hasBlog: boolean };
 
 function Logo({ c, onDark = false, size = 40 }: { c: Ctx; onDark?: boolean; size?: number }) {
   const { site, kit } = c;
@@ -399,9 +404,11 @@ function ItemText({ s }: { s: SiteItem }) {
   return s.description ? <p className="line-clamp-3 text-sm leading-relaxed text-[var(--muted)]">{s.description}</p> : null;
 }
 
-function Services({ c }: { c: Ctx }) {
+function Services({ c, limit, title }: { c: Ctx; limit?: number; title?: string }) {
   const { site, tpl } = c;
   if (!site.services.length) return null;
+  const list = limit ? site.services.slice(0, limit) : site.services;
+  const more = limit && site.services.length > limit && c.pages ? `${c.pages.home}/${c.pages.catalog.path}` : null;
   const price = (s: SiteItem) => sitePrice(s, site.currency);
   const order = (s: SiteItem) => (s.id && c.orderButton ? c.orderButton(s) : null);
   const rich = Boolean(c.orderButton) || site.services.some((s) => s.image || s.description);
@@ -440,7 +447,7 @@ function Services({ c }: { c: Ctx }) {
   if (tpl.services === "menu") {
     body = (
       <ul className="grid gap-x-12 md:grid-cols-2">
-        {site.services.map((s) => (
+        {list.map((s) => (
           <li key={s.id ?? s.name} className="flex gap-4 border-b border-[var(--line)] py-4">
             <ItemImage s={s} className="size-20 shrink-0 rounded-[var(--r)]" />
             <div className="flex min-w-0 flex-1 flex-col gap-2">
@@ -459,7 +466,7 @@ function Services({ c }: { c: Ctx }) {
   } else if (tpl.services === "numerado") {
     body = (
       <ol className="flex flex-col">
-        {site.services.map((s, i) => (
+        {list.map((s, i) => (
           <li key={s.id ?? s.name} className="grid grid-cols-[auto_1fr] items-baseline gap-x-6 gap-y-2 border-t border-[var(--line)] py-6 sm:grid-cols-[4rem_1fr_auto]">
             <span className="text-sm font-semibold text-[var(--eyebrow)]">{String(i + 1).padStart(2, "0")}</span>
             <span className="flex items-center gap-4 text-2xl font-semibold tracking-tight [font-family:var(--heading)] sm:text-3xl">
@@ -478,7 +485,7 @@ function Services({ c }: { c: Ctx }) {
       </ol>
     );
   } else if (tpl.services === "destacados") {
-    const [top, rest] = [site.services.slice(0, 3), site.services.slice(3)];
+    const [top, rest] = [list.slice(0, 3), list.slice(3)];
     body = (
       <div className="flex flex-col gap-6">
         <ul className="grid gap-3 md:grid-cols-3">
@@ -512,12 +519,17 @@ function Services({ c }: { c: Ctx }) {
       </div>
     );
   } else {
-    body = cards(site.services);
+    body = cards(list);
   }
   return (
     <section id="servicios" className={`${shell} flex scroll-mt-6 flex-col gap-10 py-16 sm:py-24`}>
-      {header}
+      {title ? <h1 className={c.h1}>{title}</h1> : header}
       {body}
+      {more && (
+        <a href={more} className={`${btnGhost} self-start`}>
+          Ver todo <Arrow />
+        </a>
+      )}
     </section>
   );
 }
@@ -567,7 +579,7 @@ function About({ c }: { c: Ctx }) {
 
 // ---------- Galería ----------
 
-function Gallery({ c }: { c: Ctx }) {
+function Gallery({ c, title }: { c: Ctx; title?: string }) {
   const photos = c.site.photos.filter((p) => p !== c.photo);
   if (!photos.length) return null;
   const alt = `Trabajo de ${c.site.name}`;
@@ -602,7 +614,7 @@ function Gallery({ c }: { c: Ctx }) {
   }
   return (
     <section className={`${shell} flex flex-col gap-8 py-16 sm:py-24`}>
-      <h2 className={c.h2}>Nuestros trabajos</h2>
+      {title ? <h1 className={c.h1}>{title}</h1> : <h2 className={c.h2}>Nuestros trabajos</h2>}
       {body}
     </section>
   );
@@ -688,6 +700,163 @@ function Contact({ c, leadForm }: { c: Ctx; leadForm?: ReactNode }) {
   );
 }
 
+// ---------- Varias páginas: menú, pie, nosotros, mapa ----------
+
+function navLinks(c: Ctx, home: string) {
+  const p = c.pages;
+  if (!p) {
+    return [
+      ...(c.site.services.length ? [{ href: `${home}#servicios`, label: "Servicios" }] : []),
+      ...(c.kit?.base?.story && c.tpl.about !== "ninguno" ? [{ href: `${home}#nosotros`, label: "Nosotros" }] : []),
+      { href: `${home}#contacto`, label: "Contacto" },
+    ];
+  }
+  return [
+    { href: p.home, label: "Inicio" },
+    ...(c.site.services.length ? [{ href: `${p.home}/${p.catalog.path}`, label: p.catalog.label }] : []),
+    ...(c.kit?.base?.story ? [{ href: `${p.home}/nosotros`, label: "Nosotros" }] : []),
+    ...(p.hasBlog ? [{ href: `${p.home}/blog`, label: "Blog" }] : []),
+    { href: `${p.home}/contacto`, label: "Contacto" },
+  ];
+}
+
+function SiteNav({ c, home }: { c: Ctx; home: string }) {
+  const links = navLinks(c, home);
+  return (
+    <>
+      <nav aria-label="Páginas" className="hidden items-center gap-7 text-sm font-medium text-[var(--muted)] md:flex">
+        {links.map((l) => (
+          <a key={l.href} href={l.href} className="hover:text-[var(--ink)]">
+            {l.label}
+          </a>
+        ))}
+      </nav>
+      {c.pages && (
+        <details className="relative md:hidden">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center rounded-[var(--rb)] border border-[var(--line)] px-4 text-sm font-semibold">Menú</summary>
+          <nav aria-label="Páginas" className="fixed inset-x-4 top-20 z-30 flex flex-col rounded-[var(--rl)] border border-[var(--line)] bg-[var(--bg)] p-2 shadow-xl">
+            {links.map((l) => (
+              <a key={l.href} href={l.href} className="rounded-[var(--r)] px-4 py-3 hover:bg-[var(--surface)]">
+                {l.label}
+              </a>
+            ))}
+          </nav>
+        </details>
+      )}
+    </>
+  );
+}
+
+function SiteFooter({ c }: { c: Ctx }) {
+  const { site, kit, tpl, pages } = c;
+  return (
+    <footer className={`${shell} flex flex-col gap-8 border-t border-[var(--line)] py-10`}>
+      <div className="flex flex-col gap-8 sm:flex-row sm:justify-between">
+        <div className="flex flex-col gap-2">
+          <span className={`font-semibold tracking-tight [font-family:var(--heading)] ${tpl.big ? "text-4xl sm:text-6xl" : "text-2xl"}`}>{site.name}</span>
+          {kit && <span className="text-[var(--muted)]">{kit.slogan}</span>}
+        </div>
+        {pages && (
+          <nav aria-label="Más páginas" className="grid grid-cols-2 gap-x-10 gap-y-2 text-sm">
+            {navLinks(c, pages.home).map((l) => (
+              <a key={l.href} href={l.href} className="text-[var(--muted)] hover:text-[var(--ink)]">
+                {l.label}
+              </a>
+            ))}
+            {legalPages(site).map((l) => (
+              <a key={l.path} href={`${pages.home}/${l.path}`} className="text-[var(--muted)] hover:text-[var(--ink)]">
+                {l.label}
+              </a>
+            ))}
+          </nav>
+        )}
+      </div>
+      <div className="flex flex-col gap-2 text-sm text-[var(--muted)] sm:flex-row sm:justify-between">
+        <span>
+          © {new Date().getFullYear()} {site.name}. Todos los derechos reservados.
+        </span>
+        <span>Página hecha con Orbusiness</span>
+      </div>
+    </footer>
+  );
+}
+
+// Llamado a la acción al final de las páginas internas.
+function CtaBand({ c }: { c: Ctx }) {
+  return (
+    <section className="bg-[var(--band)] py-14 text-[var(--on-band)]">
+      <div className={`${shell} flex flex-col items-start gap-6 sm:flex-row sm:items-center sm:justify-between`}>
+        <h2 className={c.h2}>{c.cta}</h2>
+        {c.wa && c.waFirst ? (
+          <a href={c.wa} target="_blank" rel="noopener" className={btnWa}>
+            <WaIcon /> {c.waLabel}
+          </a>
+        ) : (
+          <a href={c.pages ? `${c.pages.home}/contacto` : "#contacto"} className={`${btn} bg-[var(--bg)] text-[var(--ink)]`}>
+            Contáctanos <Arrow />
+          </a>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// Página "Nosotros": historia, promesa, misión, visión y valores de la marca.
+function AboutPage({ c }: { c: Ctx }) {
+  const base = c.kit?.base;
+  return (
+    <section className={`${shell} flex flex-col gap-14 py-16 sm:py-24`}>
+      <div className="flex max-w-3xl flex-col gap-5">
+        <p className={eyebrow}>Nosotros</p>
+        <h1 className={c.h1}>{base?.promise || c.headline}</h1>
+        <p className="text-lg leading-relaxed text-[var(--muted)]">{base?.story || c.intro}</p>
+      </div>
+      {base && (base.mission || base.vision) && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {[
+            ["Misión", base.mission],
+            ["Visión", base.vision],
+          ]
+            .filter(([, t]) => t)
+            .map(([t, text]) => (
+              <div key={t} className={`${card} flex flex-col gap-3 p-7`}>
+                <span className={eyebrow}>{t}</span>
+                <p className="text-xl leading-relaxed [font-family:var(--heading)]">{text}</p>
+              </div>
+            ))}
+        </div>
+      )}
+      {base?.values?.length ? (
+        <ul className="grid gap-8 md:grid-cols-3">
+          {base.values.map((v, i) => (
+            <li key={v.name} className="flex flex-col gap-3 border-t border-[var(--line)] pt-6">
+              <span className="text-sm font-semibold text-[var(--eyebrow)]">{String(i + 1).padStart(2, "0")}</span>
+              <span className="text-xl font-semibold [font-family:var(--heading)]">{v.name}</span>
+              <span className="text-[var(--muted)]">{v.text}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
+// Mapa (Google Maps sin llave) con la dirección del negocio.
+function MapBox({ c }: { c: Ctx }) {
+  const where = [c.site.address, c.site.zone].filter(Boolean).join(", ");
+  if (!where) return null;
+  return (
+    <section className={`${shell} pb-16 sm:pb-24`}>
+      <iframe
+        title={`Mapa de ${c.site.name}`}
+        src={`https://www.google.com/maps?q=${encodeURIComponent(`${c.site.name}, ${where}`)}&output=embed`}
+        loading="lazy"
+        className="aspect-[16/9] w-full rounded-[var(--rl)] border-0"
+      />
+    </section>
+  );
+}
+
 // ---------- Página ----------
 
 // El kit guarda el nombre de la propuesta ("Arevalo Tuerca"); en la página se habla del negocio.
@@ -712,6 +881,8 @@ export function SiteView({
   cart,
   main,
   home = "",
+  page,
+  pages = null,
   template,
   preview = false,
 }: {
@@ -721,6 +892,8 @@ export function SiteView({
   cart?: ReactNode; // barra y hoja del pedido
   main?: ReactNode; // otra pantalla con el mismo encabezado y diseño (por ejemplo, el checkout)
   home?: string; // con main: dirección de la página principal, para que el menú lleve de vuelta
+  page?: "inicio" | "catalogo" | "nosotros" | "contacto"; // página del sitio (con pages)
+  pages?: SitePages | null; // sitio de varias páginas; sin esto, una sola hoja (vista previa)
   template?: string; // para ver otra plantilla sin cambiar la guardada
   preview?: boolean; // dentro de la app: sin botones flotantes
 }) {
@@ -738,6 +911,7 @@ export function SiteView({
     waLabel: site.copy?.whatsapp ?? "Escríbenos por WhatsApp",
     waFirst: Boolean(wa && site.whatsappFirst !== false),
     orderButton,
+    pages,
     initials: site.name
       .split(/\s+/)
       .map((w) => w.charAt(0))
@@ -759,17 +933,13 @@ export function SiteView({
         <div className="flex min-w-0 flex-1 items-center">
           <Logo c={c} onDark={dark} />
         </div>
-        <nav aria-label="Secciones" className="hidden items-center gap-7 text-sm font-medium text-[var(--muted)] md:flex">
-          {site.services.length > 0 && <a href={`${home}#servicios`} className="hover:text-[var(--ink)]">Servicios</a>}
-          {kit?.base?.story && tpl.about !== "ninguno" && <a href={`${home}#nosotros`} className="hover:text-[var(--ink)]">Nosotros</a>}
-          <a href={`${home}#contacto`} className="hover:text-[var(--ink)]">Contacto</a>
-        </nav>
+        <SiteNav c={c} home={home} />
         {c.waFirst && wa ? (
           <a href={wa} target="_blank" rel="noopener" className={`${btnWa} min-h-11 px-4 text-sm`}>
             <WaIcon className="size-4" /> <span className="hidden sm:inline">WhatsApp</span>
           </a>
         ) : (
-          <a href={`${home}#contacto`} className={`${btnPrimary} min-h-11 px-4 text-sm`}>
+          <a href={pages ? `${pages.home}/contacto` : `${home}#contacto`} className={`${btnPrimary} min-h-11 px-4 text-sm`}>
             {c.cta}
           </a>
         )}
@@ -777,24 +947,35 @@ export function SiteView({
 
       {main ? (
         <main className={`${shell} py-10`}>{main}</main>
+      ) : page === "catalogo" && pages ? (
+        <main>
+          {pages.catalog.kind === "portafolio" && <Gallery c={c} title={pages.catalog.title} />}
+          <Services c={c} title={pages.catalog.kind === "portafolio" ? undefined : pages.catalog.title} />
+          <CtaBand c={c} />
+        </main>
+      ) : page === "nosotros" && pages ? (
+        <main>
+          <AboutPage c={c} />
+          <Gallery c={c} />
+          <CtaBand c={c} />
+        </main>
+      ) : page === "contacto" && pages ? (
+        <main>
+          <Contact c={c} leadForm={leadForm} />
+          <MapBox c={c} />
+        </main>
       ) : (
         <main>
           <Hero c={c} />
           <Highlights c={c} />
-          <Services c={c} />
+          <Services c={c} limit={pages ? 6 : undefined} />
           <About c={c} />
           <Gallery c={c} />
           <Contact c={c} leadForm={leadForm} />
         </main>
       )}
 
-      <footer className={`${shell} flex flex-col gap-6 border-t border-[var(--line)] py-10 sm:flex-row sm:items-end sm:justify-between`}>
-        <div className="flex flex-col gap-2">
-          <span className={`font-semibold tracking-tight [font-family:var(--heading)] ${tpl.big ? "text-4xl sm:text-6xl" : "text-2xl"}`}>{site.name}</span>
-          {kit && <span className="text-[var(--muted)]">{kit.slogan}</span>}
-        </div>
-        <span className="text-sm text-[var(--muted)]">Página hecha con Orbusiness</span>
-      </footer>
+      <SiteFooter c={c} />
       {cart}
 
       {wa && !preview && (

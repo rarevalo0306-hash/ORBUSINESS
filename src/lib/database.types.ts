@@ -366,6 +366,10 @@ export type Database = {
         },
         { business_id: string; prompt: string; aspect: string; seconds: number; service_id?: string | null; status?: string; prediction_id?: string | null; video_path?: string | null; error?: string | null }
       >;
+      blog_posts: Table<
+        { id: string; business_id: string; slug: string; title: string; excerpt: string | null; body: string; published: boolean; created_at: string; updated_at: string },
+        { business_id: string; slug: string; title: string; body: string; excerpt?: string | null; published?: boolean; updated_at?: string }
+      >;
     };
     Views: { [_ in never]: never };
     Functions: {

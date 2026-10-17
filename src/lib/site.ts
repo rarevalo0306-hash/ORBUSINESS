@@ -48,6 +48,7 @@ export type SiteContent = {
   paymentMethods?: string[];
   checkout?: CheckoutSettings; // entrega, recoger, envío y cómo pagar (páginas publicadas antes no lo traen)
   booking?: { enabled: boolean; tz: string }; // citas en línea para servicios
+  countryCode?: string | null; // para las páginas legales (ley de datos del país)
   logoUrl: string | null;
   photos: string[];
   kind?: string | null; // products | services | both
@@ -192,6 +193,7 @@ export function buildSiteContent(
     address: b.address,
     paymentMethods: b.payment_methods,
     checkout: checkoutSettings(b.checkout, b.offers_delivery),
+    countryCode: b.country_code,
     booking: (({ enabled, tz }) => ({ enabled, tz }))(bookingSettings(b.booking, b.country_code)),
     logoUrl,
     photos,
